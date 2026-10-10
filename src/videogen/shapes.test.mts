@@ -116,7 +116,7 @@ test('the same constants and paths can come from the catalog', async () => {
 test('a provider 4xx is an input error with its own words; auth and rate limits stay upstream trouble', async () => {
   reply = { status: 400, body: { error: { code: 'keyframe_out_of_range', message: 'keyframe at 9 s is past the end' } } };
   await assert.rejects(startVideoJob({ prompt: 'p', model: 'm' }, config({ wire: 'passthrough' })), (e: Error & { kind?: string }) =>
-    e.kind === 'input' && /provider refused the request 400: .*keyframe_out_of_range/.test(e.message));
+    e.kind === 'input' && e.message.includes('provider refused the request 400: keyframe_out_of_range: keyframe at 9 s is past the end') && !e.message.includes('{'));
   reply = { status: 429, body: { error: 'slow down' } };
   await assert.rejects(startVideoJob({ prompt: 'p', model: 'm' }, config({ wire: 'passthrough' })), (e: Error & { kind?: string }) => e.kind === 'upstream');
 });

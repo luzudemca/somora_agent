@@ -145,6 +145,22 @@ function variantsFor(caps: ModelCapabilities, entry: VideoModel): string[] {
   return entry.allow?.variants ?? caps.variants ?? ['video'];
 }
 
+/** The provider's own words from an error body: `error.message`,
+ *  `detail` and the like, with a code in front when it names one. The
+ *  raw body when it is not JSON or says nothing readable. */
+function readableError(text: string): string {
+  try {
+    const raw = JSON.parse(text) as Record<string, unknown>;
+    const msg = errorMessage(raw);
+    if (!msg) return text;
+    const err = raw.error as Record<string, unknown> | undefined;
+    const code = err && typeof err === 'object' && typeof err.code === 'string' ? err.code : undefined;
+    return code && !msg.includes(code) ? `${code}: ${msg}` : msg;
+  } catch {
+    return text;
+  }
+}
+
 export interface StartResult {
   job: VideoJob;
   /** Roughly how long this is expected to take, when we can say. */
@@ -253,7 +269,7 @@ export async function startVideoJob(input: StartInput, config: Config): Promise<
       ? ` The files went as multipart form data; if this provider takes JSON, set transport: json on videoGen.models '${entry.name}' (docs/videogen.md).`
       : '';
     throw new VideoGenError(
-      `Video ${refused ? 'provider refused the request' : 'upstream returned'} ${res.status}: ${text.slice(0, 300)}${hint}`,
+      `Video ${refused ? 'provider refused the request' : 'upstream returned'} ${res.status}: ${readableError(text).slice(0, 300)}${hint}`,
       refused ? 'input' : 'upstream',
     );
   }
