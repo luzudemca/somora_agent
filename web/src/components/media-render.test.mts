@@ -16,6 +16,8 @@ import {
   MediaWindow,
   specSummary,
   VideoMediaInputs,
+  VideoParamInputs,
+  videoParamBody,
 } from './MediaWindow';
 
 let ok = 0;
@@ -167,6 +169,30 @@ t('video form offers one picker per input the model takes, marks what is needed'
 
 t('no pickers for a model that takes no files', () => {
   assert(renderToString(React.createElement(VideoMediaInputs, { media: {}, files: {}, onChange: () => {} })) === '', 'rendered something');
+});
+
+const swapParams = {
+  seed: { type: 'range', min: 0, max: 100 },
+  audio: { type: 'enum', values: ['true', 'false'], note: 'keep the soundtrack' },
+  subject: { type: 'enum', values: ['largest', 'left', 'right'], default: 'largest', note: 'which person is replaced' },
+  input_references: { type: 'range', min: 0, max: 2 },
+  seconds: { type: 'range', min: 1, max: 10 },
+};
+
+t('video form builds a control per catalog parameter, with default and note', () => {
+  const html = renderToString(
+    React.createElement(VideoParamInputs, { params: swapParams, values: {}, onChange: () => {} }),
+  ).replace(/<!-- -->/g, '');
+  assert(html.includes('video-param-subject') && html.includes('<option value="right">right</option>'), 'enum not a list');
+  assert(html.includes('model default (largest)') && html.includes('which person is replaced'), 'default / note missing');
+  assert(/type="number"[^>]*min="0"[^>]*max="100"/.test(html), 'range not a number field');
+  assert(!html.includes('video-param-input_references') && !html.includes('video-param-seconds'), 'own-control fields repeated');
+});
+
+t('chosen parameters: named fields typed at the top, the rest in extra, empty = default', () => {
+  const body = videoParamBody({ subject: 'right', audio: 'false', seed: '7', unknown: 'x', quality: '' }, swapParams as never);
+  assert(JSON.stringify(body) === JSON.stringify({ audio: false, seed: 7, extra: { subject: 'right' } }), JSON.stringify(body));
+  assert(JSON.stringify(videoParamBody({}, swapParams as never)) === '{}', 'empty form sends nothing');
 });
 
 console.log(`\n${ok} ok, ${bad} fehlgeschlagen`);

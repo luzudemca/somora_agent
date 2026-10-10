@@ -123,8 +123,15 @@ resolution '4K' is not supported by Grok Imagine 2.0 — allowed: 1K, 2K
 Values under `defaults` fill in what the caller left out. A default the
 model does not take is skipped without an error.
 
-> **Note:** The catalog is read once and kept until somora restarts.
-> Restart after your provider adds a model or changes its settings.
+Besides the named settings, the catalog may describe a model's own
+parameters under `supported_parameters`: `enum` with `values`, `range`
+with `min` and `max`. A value outside them is rejected the same way.
+`allow.parameters` describes them for a provider without a catalog.
+
+The catalog is read again every 10 minutes, at once after
+`POST /config/reload`, and once more before somora rejects a request
+because of it. A model or setting your provider adds is usable without
+a restart.
 
 ## Reference images
 
@@ -408,6 +415,7 @@ Inside `allow`:
 | `supported` | The complete list of settings the model takes. Anything else is rejected. Without it, a setting the endpoint does not read is forwarded and silently ignored there. |
 | `maxN` | Most images per call, 1 to 10. |
 | `maxReferences` | Most reference images, 0 to 16. `0` means none at all. |
+| `parameters` | Per parameter `type`, `values`, `min`, `max`, `default`, `note`, in the form of a catalog's `supported_parameters`. Values outside them are rejected. |
 
 A misspelled key inside `allow` or `defaults` is a config error.
 
@@ -481,7 +489,7 @@ around the `file_write` rules.
 | `GET /images/:id/file` | The image itself. `?download=1` makes the browser save it. |
 | `GET /images/models/:name/capabilities` | What one model accepts. |
 | `GET /images/catalog` | What the provider offers. `?provider=` picks the provider. |
-| `POST /images/generate` | Generate. Body: `prompt`, optional `model`, any setting, `reference_images` as base64. |
+| `POST /images/generate` | Generate. Body: `prompt`, optional `model`, any setting, `extra`, `reference_images` as base64. |
 | `DELETE /images/:id` | Forget the record. The file stays. |
 
 `POST /images/generate` answers `400` for something the caller can fix,

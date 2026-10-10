@@ -1337,6 +1337,23 @@ export const ImageSpecDefaultsSchema = z
   .default({});
 export type ImageSpecDefaults = z.infer<typeof ImageSpecDefaultsSchema>;
 
+/**
+ * A parameter described in config, in the same form a provider catalog
+ * uses under `supported_parameters` — for a provider that publishes no
+ * catalog. `enum` takes one of `values`, `range` a number from `min` to
+ * `max`; `default` and `note` are shown to whoever picks a value.
+ */
+export const ParamInfoSchema = z
+  .object({
+    type: z.string().min(1).optional(),
+    values: z.array(z.union([z.string(), z.number(), z.boolean()])).min(1).optional(),
+    min: z.number().optional(),
+    max: z.number().optional(),
+    default: z.union([z.string(), z.number(), z.boolean()]).optional(),
+    note: z.string().min(1).optional(),
+  })
+  .strict();
+
 export const ImageModelSchema = z.object({
   /** Short handle used by the tool's `model` arg and the UI picker.
    *  Deliberately NOT the wire id — agents and humans shouldn't have to
@@ -1457,6 +1474,10 @@ export const ImageModelSchema = z.object({
       supported: z.array(z.string().min(1)).min(1).optional(),
       maxN: z.number().int().min(1).max(10).optional(),
       maxReferences: z.number().int().min(0).max(16).optional(),
+      /** Per parameter: kind, values or range, default, help text —
+       *  what a catalog's `supported_parameters` says. Drives the check,
+       *  image_models and the web form. */
+      parameters: z.record(z.string(), ParamInfoSchema).optional(),
     })
     // Strict on purpose: a stray or misspelled key here would be
     // dropped without a word, and the operator would be looking at a
@@ -1602,16 +1623,21 @@ export const VideoMediaFieldSchema = z
     minSeconds: z.number().positive().optional(),
     /** JSON only: send a list even for a single file. */
     array: z.boolean().optional(),
-    /** Keyframes (JSON only): each file becomes an object in a list at
-     *  `field`, with the file under `url` and its time under `seconds`
-     *  or, converted with the model's `fps`, as a frame number under
-     *  `frame`. `strength` names the key for an optional strength. */
+    /** JSON only: each file becomes an object in a list at `field`,
+     *  with the file under `url` (a dotted path nests it:
+     *  `image_url.url`) and, for keyframes, its time under `seconds` or,
+     *  converted with the model's `fps`, as a frame number under `frame`.
+     *  `strength` names the key for an optional strength. `const` adds
+     *  fixed fields to every object (`{type: image_url, frame_type:
+     *  first_frame}`). Several types may share one `field`: their
+     *  objects go into the same list, each in its own type's form. */
     item: z
       .object({
         url: z.string().min(1),
         seconds: z.string().min(1).optional(),
         frame: z.string().min(1).optional(),
         strength: z.string().min(1).optional(),
+        const: z.record(z.string().min(1), z.union([z.string(), z.number(), z.boolean()])).optional(),
       })
       .strict()
       .optional(),
@@ -1701,6 +1727,10 @@ export const VideoModelSchema = z.object({
       size: z.array(z.string().min(1)).optional(),
       maxSeconds: z.number().positive().optional(),
       maxReferences: z.number().int().min(0).max(4).optional(),
+      /** Per parameter: kind, values or range, default, help text —
+       *  what a catalog's `supported_parameters` says. Drives the check,
+       *  video_models and the web form. */
+      parameters: z.record(z.string(), ParamInfoSchema).optional(),
     })
     .strict()
     .optional(),

@@ -15,9 +15,9 @@ import { z } from 'zod';
 import { readFile, stat } from 'node:fs/promises';
 import type { Buffer } from 'node:buffer';
 import { describeSlots, MAX_MEDIA_BYTES, mediaItemFromBytes, mediaSlots, type MediaItem } from '../../videogen/media.ts';
-import { startVideoJob, VideoGenError } from '../../videogen/generate.ts';
+import { startVideoJob, videoModelCapabilities, VideoGenError } from '../../videogen/generate.ts';
+import { NAMED_VIDEO_SPECS } from '../../videogen/request.ts';
 import { checkSlot, listJobs, readJob } from '../../videogen/jobs.ts';
-import { resolveCapabilities } from '../../media/capabilities.ts';
 import { resolveVideoModel, VideoMediaTypeSchema } from '../../config/types.ts';
 import { referenceFromBytes } from '../../imagegen/references.ts';
 import { ImageGenError } from '../../imagegen/generate.ts';
@@ -232,7 +232,9 @@ export const videoGenerate: ToolDefinition<GenerateArgs, StartOutput> = {
       save_to: { type: 'string', description: 'Extra destination for the finished file.' },
       extra: {
         type: 'object',
-        description: 'Provider-specific fields, passed through untouched.',
+        description:
+          'Model-specific fields the model lists under accepts in video_models but that have no ' +
+          'argument here, e.g. {"subject": "right"}. Checked against what the model takes.',
         additionalProperties: true,
       },
     },
@@ -247,7 +249,7 @@ export const videoGenerate: ToolDefinition<GenerateArgs, StartOutput> = {
     const references = await readReferences(input, ctx);
     const media = await readMedia(input, ctx);
     const specs: Record<string, unknown> = { ...(input.extra ?? {}) };
-    for (const key of ['seconds', 'size', 'aspect_ratio', 'audio', 'quality', 'seed'] as const) {
+    for (const key of NAMED_VIDEO_SPECS) {
       if (input[key] !== undefined) specs[key] = input[key];
     }
 
@@ -255,14 +257,20 @@ export const videoGenerate: ToolDefinition<GenerateArgs, StartOutput> = {
     // see inMcpChild. References travel as base64 there because the
     // child and the server share a filesystem but not a request.
     if (inMcpChild()) {
+      // The same request the in-process path builds: provider fields in
+      // extra, the named ones beside it (src/videogen/request.ts).
+      const named: Record<string, unknown> = {};
+      for (const key of NAMED_VIDEO_SPECS) if (input[key] !== undefined) named[key] = input[key];
       const { job } = await startViaHttp({
         prompt: input.prompt,
         ...(input.model ? { model: input.model } : {}),
-        ...specs,
+        ...named,
+        ...(input.extra && Object.keys(input.extra).length > 0 ? { extra: input.extra } : {}),
+        ...(input.save_to ? { save_to: input.save_to } : {}),
         agent: ctx.agent,
         ...(ctx.session ? { session: ctx.session } : {}),
         ...(references.length > 0
-          ? { reference_images: references.map((r) => r.bytes.toString('base64')) }
+          ? { reference_images: references.map((r) => ({ data: r.bytes.toString('base64'), filename: r.filename })) }
           : {}),
         ...(media.length > 0
           ? {
@@ -395,6 +403,10 @@ interface VideoModelRow {
    *  400, so prefer these. */
   recommended?: Record<string, string[]>;
   max_references?: number;
+  /** The provider's default per parameter, where it names one. */
+  defaults?: Record<string, string | number | boolean>;
+  /** The provider's help text per parameter. */
+  param_notes?: Record<string, string>;
   /** Input files the model takes, by type: kind, how many, how long. */
   media?: Record<string, { kind: string; max?: number; min?: number; max_seconds?: number }>;
   variants?: string[];
@@ -465,35 +477,37 @@ export const videoModels: ToolDefinition<ModelsArgs, { models: VideoModelRow[] }
           row.note =
             `provider '${entry.provider}' is not an openai-compatible provider — ` +
             'video_generate will refuse this model.';
-        } else if (entry.allow) {
-          row.accepts = Object.fromEntries(
-            (entry.allow.supported ?? []).map((f) => [f, 'any value']),
-          );
-          if (entry.allow.maxReferences !== undefined) row.max_references = entry.allow.maxReferences;
-          if (entry.allow.variants) row.variants = entry.allow.variants;
-          row.media = mediaRow(mediaSlots(entry, {}));
-          row.note = 'Declared in config; this provider publishes no catalog.';
         } else {
           try {
-            const caps = await resolveCapabilities(resolved.providerName, resolved.provider, {
-              name: entry.name,
-              model: entry.model,
-              capabilitiesEndpoint: entry.capabilitiesEndpoint,
-            } as never);
+            const caps = await videoModelCapabilities(ctx.config, entry.name);
             const accepts: Record<string, string[] | string> = {};
             for (const [field, values] of Object.entries(caps.values)) {
               if (Array.isArray(values) && values.length > 0) accepts[field] = values;
             }
-            if (caps.supported) {
-              for (const field of caps.supported) {
-                if (!(field in accepts)) accepts[field] = 'any value';
-              }
-              row.note =
-                'Fields not listed here are not accepted by this model — passing them is an error.';
-            } else {
-              row.note = 'No published parameter list; unlisted fields are passed through untouched.';
+            for (const field of caps.supported ?? []) {
+              if (field in accepts) continue;
+              const info = caps.params?.[field];
+              accepts[field] = info?.values?.length
+                ? info.values
+                : info?.type === 'range' && (info.min !== undefined || info.max !== undefined)
+                  ? `number ${info.min ?? '…'} to ${info.max ?? '…'}`
+                  : 'any value';
             }
             row.accepts = accepts;
+            const defaults = Object.fromEntries(
+              Object.entries(caps.params ?? {}).filter(([, i]) => i.default !== undefined).map(([f, i]) => [f, i.default!]),
+            );
+            if (Object.keys(defaults).length > 0) row.defaults = defaults;
+            const notes = Object.fromEntries(
+              Object.entries(caps.params ?? {}).filter(([, i]) => i.note).map(([f, i]) => [f, i.note!]),
+            );
+            if (Object.keys(notes).length > 0) row.param_notes = notes;
+            row.note = caps.source === 'config'
+              ? 'Declared in config; this provider publishes no catalog.'
+              : caps.supported
+                ? 'Fields not listed here are not accepted by this model — passing them is an error. ' +
+                  'Pass a model-specific one (e.g. a field listed here that has no own argument) in extra.'
+                : 'No published parameter list; unlisted fields are passed through untouched.';
             if (caps.recommended && Object.keys(caps.recommended).length > 0) {
               row.recommended = caps.recommended as Record<string, string[]>;
             }

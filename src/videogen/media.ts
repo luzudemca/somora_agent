@@ -485,8 +485,13 @@ export function buildCreateBody(args: {
   }
   for (const [field, list] of byField) {
     const slot = slots[list[0]!.type]!;
-    if (slot.item) {
-      const objs = list.map((it) => keyframeObject(it, slot, slot.fps ?? args.fps));
+    if (list.some((it) => slots[it.type]!.item)) {
+      // One list, each file in its own type's form — an opening and a
+      // closing frame share `frame_images` and differ by a constant.
+      const objs = list.map((it) => {
+        const own = slots[it.type]!;
+        return own.item ? itemObject(it, own, own.fps ?? args.fps) : dataUri(it);
+      });
       const existing = getPath(body, field);
       setPath(body, field, [...(Array.isArray(existing) ? existing : []), ...objs]);
       continue;
@@ -497,12 +502,14 @@ export function buildCreateBody(args: {
   return { body: JSON.stringify(body), contentType: 'application/json' };
 }
 
-function keyframeObject(it: MediaItem, slot: MediaSlot, fps?: number): Record<string, unknown> {
+function itemObject(it: MediaItem, slot: MediaSlot, fps?: number): Record<string, unknown> {
   const item = slot.item!;
-  const o: Record<string, unknown> = { [item.url]: dataUri(it) };
-  if (item.seconds) o[item.seconds] = it.seconds;
-  else if (item.frame && fps !== undefined && it.seconds !== undefined) o[item.frame] = Math.round(it.seconds * fps);
-  if (item.strength && it.strength !== undefined) o[item.strength] = it.strength;
+  const o: Record<string, unknown> = {};
+  for (const [path, value] of Object.entries(item.const ?? {})) setPath(o, path, value);
+  setPath(o, item.url, dataUri(it));
+  if (item.seconds) setPath(o, item.seconds, it.seconds);
+  else if (item.frame && fps !== undefined && it.seconds !== undefined) setPath(o, item.frame, Math.round(it.seconds * fps));
+  if (item.strength && it.strength !== undefined) setPath(o, item.strength, it.strength);
   return o;
 }
 

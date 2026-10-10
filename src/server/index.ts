@@ -35,18 +35,20 @@ import { diffConfigSections, restartRequiredFor, RESTART_REQUIRED_SECTIONS } fro
 import { spawn as spawnChild, spawnSync as spawnSyncChild } from 'node:child_process';
 import { mkdir as mkdirFs, rename as renameFs, stat as statFile, writeFile as writeFileFs } from 'node:fs/promises';
 import { workerChain, type Config, resolveAnyRef, describeModelRefs, type ThinkingLevel, SamplingSchema,
-  listAllModels, VideoMediaTypeSchema,
+  listAllModels,
 } from '../config/types.ts';
 import { mergeSampling, SAMPLING_KEYS } from '../engine/sampling.ts';
 import { storeAttachment } from '../attachments/store.ts';
 import { generateImage, ImageGenError } from '../imagegen/generate.ts';
 import { referenceFromBase64 } from '../imagegen/references.ts';
-import { startVideoJob, VideoGenError, videoModelMedia } from '../videogen/generate.ts';
-import { mediaItemFromBytes, type MediaItem } from '../videogen/media.ts';
+import { startVideoJob, VideoGenError, videoModelCapabilities, videoModelMedia } from '../videogen/generate.ts';
+import { videoRequestFromBody, VideoRequestError } from '../videogen/request.ts';
+import { ensureVideoStill } from '../videogen/frame.ts';
 import { checkSlot as checkVideoSlot, listJobs as listVideoJobs } from '../videogen/jobs.ts';
 import { configureVideoNotifier, startVideoRunner } from '../videogen/runner.ts';
 import { configureVideoWake, wakeForJob } from '../videogen/wake.ts';
 import {
+  clearCatalogCache,
   listCatalogModels as listImageCatalogModels,
   resolveCapabilities as resolveImageCapabilities,
 } from '../media/capabilities.ts';
@@ -1788,6 +1790,9 @@ app.post('/config/reload', async (c) => {
   // unavailable mark is dropped and the TTL re-read.
   configureModelAvailability(next.fallback.retryUnavailableMinutes);
   resetModelAvailability();
+  // And "read the provider catalogs again": a model or parameter added
+  // there must not stay rejected until the cache expires.
+  clearCatalogCache();
   logger.info({ msg: 'config.reloaded', changed, restartRequired });
   return c.json({ ok: true, changed, restartRequired, loadedAt: configLoadedAt });
 });
@@ -4177,8 +4182,7 @@ app.post('/images/generate', async (c) => {
   const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
   if (!prompt) return c.json({ error: 'prompt is required' }, 400);
 
-  const specs: Record<string, unknown> = {};
-  for (const key of [
+  const IMAGE_SPEC_KEYS = [
     'resolution',
     'aspect_ratio',
     'size',
@@ -4191,9 +4195,22 @@ app.post('/images/generate', async (c) => {
     'steps',
     'cfg',
     'guidance',
-  ]) {
+  ];
+  const specs: Record<string, unknown> = {};
+  for (const key of IMAGE_SPEC_KEYS) {
     if (body[key] !== undefined && body[key] !== null && body[key] !== '') specs[key] = body[key];
   }
+  // Provider fields somora has no name for travel in `extra`, exactly as
+  // the image_generate tool sends them. Anything else at the top level
+  // is reported back rather than dropped without a word.
+  if (body.extra !== undefined && (body.extra === null || typeof body.extra !== 'object' || Array.isArray(body.extra))) {
+    return c.json({ error: 'extra must be an object of provider fields', kind: 'input' }, 400);
+  }
+  const extra = body.extra as Record<string, unknown> | undefined;
+  const known = new Set(['prompt', 'model', 'reference_images', 'session', 'agent', 'extra', ...IMAGE_SPEC_KEYS]);
+  const ignored = Object.keys(body)
+    .filter((k) => !known.has(k) && body[k] !== undefined)
+    .map((k) => (k === 'save_to' ? 'ignored: save_to — images are kept in the image folder only' : `ignored: ${k} — pass provider-specific fields inside extra`));
 
   // One image, one place (2026-09-10): the second destination is gone
   // from the tool and from this route. A field that is still sent by an
@@ -4206,6 +4223,7 @@ app.post('/images/generate', async (c) => {
         prompt,
         ...(typeof body.model === 'string' ? { model: body.model } : {}),
         specs: specs as Parameters<typeof generateImage>[0]['specs'],
+        ...(extra && Object.keys(extra).length > 0 ? { extra } : {}),
         ...(saveTo ? { saveTo } : {}),
         // The browser has bytes, not a server path — see
         // src/imagegen/references.ts on why the two entrances differ.
@@ -4223,7 +4241,7 @@ app.post('/images/generate', async (c) => {
     return c.json({
       images: result.images,
       costUsd: result.costUsd ?? null,
-      ...(result.warnings ? { warnings: result.warnings } : {}),
+      ...(result.warnings || ignored.length > 0 ? { warnings: [...(result.warnings ?? []), ...ignored] } : {}),
       ...(result.fellBackFrom ? { fellBackFrom: result.fellBackFrom } : {}),
     });
   } catch (err) {
@@ -4293,8 +4311,10 @@ app.get('/media/:id/thumb', async (c) => serveMediaFile(c, 'thumb'));
 async function serveMediaFile(c: Context, which: 'file' | 'thumb'): Promise<Response> {
   const id = c.req.param('id');
   if (!id) return c.json({ error: 'missing id' }, 400);
-  const record = await readMediaRecord(id);
-  if (!record) return c.json({ error: 'not found' }, 404);
+  const found = await readMediaRecord(id);
+  if (!found) return c.json({ error: 'not found' }, 404);
+  // A video without a still gets one cut the first time it is shown.
+  const record = which === 'thumb' ? await ensureVideoStill(found, config) : found;
   const path = which === 'thumb' ? record.thumbPath : record.path;
   const mime = which === 'thumb' ? (record.thumbMime ?? 'image/webp') : record.mime;
   if (!path) return c.json({ error: 'no thumbnail for this item' }, 404);
@@ -4830,6 +4850,10 @@ app.get('/video/status', async (c) => {
         wire: m.wire,
         // The input files it takes, so a form can offer the right pickers.
         media: await videoModelMedia(config, m.name),
+        // Its parameters as the catalog (or allow.parameters) describes
+        // them, so a form can offer a control for each — including a
+        // model's own ones somora has no name for.
+        params: (await videoModelCapabilities(config, m.name)).params ?? {},
       })),
     ),
     jobs,
@@ -4840,55 +4864,23 @@ app.post('/video/generate', async (c) => {
   const ready = videoGenReady();
   if (!ready.ok) return c.json({ error: ready.reason }, 503);
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
-  const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
-  if (!prompt) return c.json({ error: 'prompt is required' }, 400);
-
-  const specs: Record<string, unknown> = {};
-  for (const key of ['seconds', 'size', 'aspect_ratio', 'audio', 'quality', 'seed']) {
-    if (body[key] !== undefined && body[key] !== null && body[key] !== '') specs[key] = body[key];
-  }
-  // References arrive as base64 here: the browser has bytes and no
-  // server path, and the MCP child hands its already-read files over
-  // the same way.
-  const references = Array.isArray(body.reference_images)
-    ? body.reference_images
-        .filter((r): r is string => typeof r === 'string')
-        .map((r, i) => referenceFromBase64(r, i))
-    : [];
-  // Input files by meaning, as base64 (or data: URIs) for the same reason.
-  let media: MediaItem[] = [];
-  if (Array.isArray(body.media)) {
-    try {
-      media = body.media.map((m: unknown, i: number) => {
-        const r = (m ?? {}) as Record<string, unknown>;
-        const type = VideoMediaTypeSchema.safeParse(r.type);
-        if (!type.success) throw new Error(`media #${i + 1}: unknown type ${JSON.stringify(r.type)}`);
-        if (typeof r.data !== 'string' || r.data.length === 0) throw new Error(`media #${i + 1}: data (base64) is required`);
-        const comma = r.data.indexOf(',');
-        const bare = r.data.startsWith('data:') && comma > 0 ? r.data.slice(comma + 1) : r.data;
-        return mediaItemFromBytes(type.data, Buffer.from(bare, 'base64'), typeof r.filename === 'string' ? r.filename : `${type.data}-${i + 1}`, {
-          ...(typeof r.seconds === 'number' ? { seconds: r.seconds } : {}),
-          ...(typeof r.strength === 'number' ? { strength: r.strength } : {}),
-        });
-      });
-    } catch (err) {
-      return c.json({ error: (err as Error).message, kind: 'input' }, 400);
+  let request: ReturnType<typeof videoRequestFromBody>;
+  try {
+    request = videoRequestFromBody(body);
+  } catch (err) {
+    if (err instanceof VideoRequestError || err instanceof ImageGenError) {
+      return c.json({ error: err.message, kind: 'input' }, 400);
     }
+    throw err;
   }
 
   try {
-    const { job } = await startVideoJob(
-      {
-        prompt,
-        ...(typeof body.model === 'string' ? { model: body.model } : {}),
-        specs,
-        ...(references.length > 0 ? { references } : {}),
-        ...(media.length > 0 ? { media } : {}),
-        ...(typeof body.agent === 'string' ? { agent: body.agent } : {}),
-        ...(typeof body.session === 'string' ? { session: body.session } : {}),
-      },
-      config,
-    );
+    const { job: started } = await startVideoJob(request.input, config);
+    // Fields this route did not use travel back with the job, the same
+    // place the provider's own warnings go.
+    const job = request.ignored.length > 0
+      ? { ...started, warnings: [...(started.warnings ?? []), ...request.ignored] }
+      : started;
     return c.json({ job });
   } catch (err) {
     if (err instanceof VideoGenError) {

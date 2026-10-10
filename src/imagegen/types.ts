@@ -121,9 +121,29 @@ export interface ModelCapabilities {
   media?: Record<string, CatalogMedia>;
   /** Video only: frames per second, from the catalog's `fps`. */
   fps?: number;
+  /**
+   * Every parameter the catalog (or `allow.parameters`) describes, by
+   * name: its kind, allowed values or range, default and help text. The
+   * general form of `values`, for parameters somora has no name for —
+   * a model's own switches, such as which person a replace model swaps.
+   * Validation, the tool's model listing and the web form are built
+   * from it; nothing about a particular parameter is coded in somora.
+   */
+  params?: Record<string, ParamInfo>;
   /** Image only: the job paths from the catalog's `async` block, when
    *  the endpoint offers create → status → content (docs/imagegen.md). */
   jobs?: ImageJobPaths;
+}
+
+/** One parameter as a catalog describes it (`supported_parameters.<name>`). */
+export interface ParamInfo {
+  /** `enum`, `range`, or whatever else the catalog says (`boolean`, `string`). */
+  type?: string;
+  values?: string[];
+  min?: number;
+  max?: number;
+  default?: string | number | boolean;
+  note?: string;
 }
 
 export interface ImageJobPaths {
@@ -140,7 +160,7 @@ export interface CatalogMedia {
   minSeconds?: number;
   fields?: string[];
   /** Keyframes: the keys of each list entry (file, time, strength). */
-  item?: { url: string; seconds?: string; frame?: string; strength?: string; strengthRange?: [number, number] };
+  item?: { url: string; seconds?: string; frame?: string; strength?: string; strengthRange?: [number, number]; const?: Record<string, string | number | boolean> };
   /** Frame rate a keyframe's frame number counts at (`anchor_fps`). */
   fps?: number;
 }

@@ -323,8 +323,20 @@ export interface VideoStatusResponse {
     wire: string;
     /** Input files the model takes, by type (docs/videogen.md). */
     media?: Record<string, VideoMediaSummary>;
+    /** The model's parameters as its provider describes them. */
+    params?: Record<string, ModelParamInfo>;
   }>;
   jobs?: VideoJobDto[];
+}
+
+/** One parameter as a provider catalog describes it. */
+export interface ModelParamInfo {
+  type?: string;
+  values?: string[];
+  min?: number;
+  max?: number;
+  default?: string | number | boolean;
+  note?: string;
 }
 
 export interface VideoMediaSummary {
@@ -345,6 +357,8 @@ export interface GenerateVideoBody {
   seed?: number;
   /** Input files by meaning; `data` is a data: URI or bare base64. */
   media?: Array<{ type: string; data: string; filename?: string }>;
+  /** Provider fields somora has no name for, e.g. a model's own switch. */
+  extra?: Record<string, unknown>;
 }
 
 export type ImageSpecField =

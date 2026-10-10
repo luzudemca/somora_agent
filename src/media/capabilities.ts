@@ -30,14 +30,19 @@ import {
   type EnumerableSpecField,
   type ImageJobPaths,
   type ImageSpecs,
+  type ParamInfo,
   type ModelCapabilities,
   supportsField,
 } from '../imagegen/types.ts';
 
-/** Catalog responses are cached for the process lifetime, keyed by
- *  provider+endpoint. Restart to re-read — same posture as the rest of
- *  config.yaml, and a model's parameter list does not change hourly. */
-const catalogCache = new Map<string, Promise<CatalogEntry[] | null>>();
+/** Catalog responses are cached per provider+endpoint, for
+ *  CATALOG_TTL_MS when the catalog answered and CATALOG_RETRY_MS when it
+ *  did not. A provider adds models and parameters while somora runs; a
+ *  cache that never expired rejected valid requests until a restart
+ *  (2026-10-10). `POST /config/reload` clears it outright. */
+const CATALOG_TTL_MS = 10 * 60_000;
+const CATALOG_RETRY_MS = 60_000;
+const catalogCache = new Map<string, { at: number; pending: Promise<CatalogEntry[] | null>; failed?: boolean }>();
 
 interface CatalogEntry {
   id: string;
@@ -69,7 +74,34 @@ interface ParamSpec {
   also_accepts?: unknown;
   min?: unknown;
   max?: unknown;
+  default?: unknown;
   note?: unknown;
+}
+
+/** The catalog's parameter list as somora hands it on: known keys only,
+ *  each checked for type, nothing guessed. */
+export function paramInfos(params: Record<string, unknown> | null | undefined): Record<string, ParamInfo> | undefined {
+  if (!params) return undefined;
+  const out: Record<string, ParamInfo> = {};
+  for (const [name, raw] of Object.entries(params)) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      out[name] = {};
+      continue;
+    }
+    const spec = raw as ParamSpec;
+    const info: ParamInfo = {};
+    if (typeof spec.type === 'string' && spec.type) info.type = spec.type;
+    const values = Array.isArray(spec.values)
+      ? spec.values.filter((v) => ['string', 'number', 'boolean'].includes(typeof v)).map(String)
+      : undefined;
+    if (values && values.length > 0) info.values = values;
+    if (typeof spec.min === 'number' && Number.isFinite(spec.min)) info.min = spec.min;
+    if (typeof spec.max === 'number' && Number.isFinite(spec.max)) info.max = spec.max;
+    if (['string', 'number', 'boolean'].includes(typeof spec.default)) info.default = spec.default as string | number | boolean;
+    if (typeof spec.note === 'string' && spec.note.trim()) info.note = spec.note.trim().slice(0, 500);
+    out[name] = info;
+  }
+  return out;
 }
 
 function supportedParameters(raw: Record<string, unknown>): Record<string, ParamSpec> | null {
@@ -205,17 +237,28 @@ export async function loadCatalog(
 ): Promise<CatalogEntry[] | null> {
   if (!endpoint) return null;
   const key = `${providerName}${endpoint}`;
-  let pending = catalogCache.get(key);
-  if (!pending) {
-    pending = fetchCatalog(provider, endpoint, timeoutMs);
-    catalogCache.set(key, pending);
-  }
-  return pending;
+  const hit = catalogCache.get(key);
+  if (hit && Date.now() - hit.at < (hit.failed ? CATALOG_RETRY_MS : CATALOG_TTL_MS)) return hit.pending;
+  const entry: { at: number; pending: Promise<CatalogEntry[] | null>; failed?: boolean } = {
+    at: Date.now(),
+    pending: fetchCatalog(provider, endpoint, timeoutMs),
+  };
+  void entry.pending.then((rows) => {
+    if (rows === null) entry.failed = true;
+  });
+  catalogCache.set(key, entry);
+  return entry.pending;
 }
 
-/** Test seam — the cache is process-wide and would leak between cases. */
+/** Forget every cached catalog — on `POST /config/reload`, and between
+ *  test cases. */
 export function clearCatalogCache(): void {
   catalogCache.clear();
+}
+
+/** Forget one provider's catalog, so the next lookup reads it fresh. */
+export function forgetCatalog(providerName: string, endpoint: string | null): void {
+  if (endpoint) catalogCache.delete(`${providerName}${endpoint}`);
 }
 
 /** Every image model the provider offers, for the UI's "what can I
@@ -253,6 +296,7 @@ export async function resolveCapabilities(
       // catalog path: a list that exists is exhaustive, no list means
       // we don't know and everything passes.
       ...(entry.allow.supported ? { supported: entry.allow.supported } : {}),
+      ...(entry.allow.parameters ? { params: paramInfos(entry.allow.parameters) } : {}),
       maxN: entry.allow.maxN,
       maxReferences: entry.allow.maxReferences,
     };
@@ -302,7 +346,7 @@ export async function resolveCapabilities(
     ...(sizeAlsoAccepts ? { sizeAlsoAccepts } : {}),
     // Only when the catalog published a parameter list. A catalog entry
     // without one tells us the model exists, not what it takes.
-    ...(params ? { supported: Object.keys(params) } : {}),
+    ...(params ? { supported: Object.keys(params), params: paramInfos(params) } : {}),
     maxN: rangeMax(params, 'n') ?? readNumber(row.raw, ['max_images', 'maxN', 'max_n']),
     maxReferences:
       rangeMax(params, 'input_references', true) ??
@@ -323,6 +367,16 @@ export async function resolveCapabilities(
       ? { variants: asStringArray(row.raw.supported_variants) }
       : {}),
   };
+}
+
+/** Fixed fields of a list entry (`item.const`): plain values only. */
+function constFields(v: unknown): Record<string, string | number | boolean> | undefined {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const out: Record<string, string | number | boolean> = {};
+  for (const [k, x] of Object.entries(v)) {
+    if (k && (typeof x === 'string' || typeof x === 'boolean' || (typeof x === 'number' && Number.isFinite(x)))) out[k] = x;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /** A catalog's `async` block: `{create, status, content}`, all three
@@ -367,6 +421,7 @@ function acceptedMedia(raw: Record<string, unknown>): Record<string, CatalogMedi
         ...(key(item.seconds) ? { seconds: key(item.seconds)! } : {}),
         ...(key(item.frame) ? { frame: key(item.frame)! } : {}),
         ...(key(item.strength) ? { strength: key(item.strength)! } : {}),
+        ...(constFields(item.const) ? { const: constFields(item.const)! } : {}),
         ...(Array.isArray(item.strength_range) && item.strength_range.length === 2 && item.strength_range.every((x) => typeof x === 'number' && Number.isFinite(x))
           ? { strengthRange: [item.strength_range[0] as number, item.strength_range[1] as number] as [number, number] }
           : {}),
@@ -420,6 +475,27 @@ export function validateSpecs(
       errors.push(
         `${field} '${value}' is not supported by ${modelLabel} — allowed: ${allowed.join(', ')}`,
       );
+    }
+  }
+
+  // Every other parameter the catalog describes: one of its values, or
+  // a number within its range. The same rule for a field somora has a
+  // name for and for one only the provider knows.
+  for (const [field, value] of Object.entries(specs)) {
+    if (value === undefined || value === null) continue;
+    if ((ENUMERABLE_SPEC_FIELDS as readonly string[]).includes(field) || field === 'n') continue;
+    const info = caps.params?.[field];
+    if (!info) continue;
+    if (info.type === 'enum' && info.values && info.values.length > 0) {
+      const ok = info.values.some((a) => a.toLowerCase() === String(value).toLowerCase());
+      if (!ok) errors.push(`${field} '${String(value)}' is not supported by ${modelLabel} — allowed: ${info.values.join(', ')}`);
+    } else if (info.type === 'range' && (info.min !== undefined || info.max !== undefined)) {
+      const num = typeof value === 'number' ? value : typeof value === 'string' && value.trim() !== '' ? Number(value) : NaN;
+      if (!Number.isFinite(num)) {
+        errors.push(`${field} must be a number for ${modelLabel}, got '${String(value)}'`);
+      } else if ((info.min !== undefined && num < info.min) || (info.max !== undefined && num > info.max)) {
+        errors.push(`${field} ${num} is outside what ${modelLabel} takes (${info.min ?? '…'} to ${info.max ?? '…'})`);
+      }
     }
   }
 

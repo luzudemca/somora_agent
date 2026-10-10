@@ -62,7 +62,7 @@ export function referenceFromBytes(bytes: Buffer, label: string): ReferenceImage
 
 /** Build a reference from a base64 string, with or without a
  *  `data:image/png;base64,` prefix — browsers produce both. */
-export function referenceFromBase64(value: string, index: number): ReferenceImage {
+export function referenceFromBase64(value: string, index: number, filename?: string): ReferenceImage {
   const comma = value.indexOf(',');
   const bare = value.startsWith('data:') && comma > 0 ? value.slice(comma + 1) : value;
   let bytes: Buffer;
@@ -71,5 +71,5 @@ export function referenceFromBase64(value: string, index: number): ReferenceImag
   } catch {
     throw new ImageGenError(`Reference image #${index + 1} is not valid base64.`, 'input');
   }
-  return referenceFromBytes(bytes, `reference-${index + 1}`);
+  return referenceFromBytes(bytes, filename || `reference-${index + 1}`);
 }

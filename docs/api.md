@@ -322,7 +322,8 @@ running config stays in force.
 | `400` | `{ok: false, error}` with the schema problems. Nothing was changed. |
 
 A reload also forgets every "model unavailable" mark, like
-`POST /models/availability/reset`.
+`POST /models/availability/reset`, and every cached provider catalog
+of image and video models: the next request reads them fresh.
 
 ### `POST /server/restart`
 
@@ -2339,13 +2340,15 @@ Generates images.
 | `model` | no | A configured model name. |
 | `resolution`, `aspect_ratio`, `size`, `quality`, `output_format`, `background`, `output_compression`, `seed`, `n`, `steps`, `cfg`, `guidance` | no | Specs. Which ones a model takes is in its capabilities. |
 | `reference_images` | no | Images as base64 strings. The `image_generate` tool takes file paths instead. |
+| `extra` | no | Provider fields somora has no name for, passed through as given, as the tool's `extra`. |
 | `session` | no | Recorded with the image. |
 
 Returns `{images: [record], costUsd, warnings?, fellBackFrom?}`.
 `warnings` lists what the endpoint did differently than asked, for
-example a size it replaced. `fellBackFrom` names the models that were
-unavailable when a backup model was used. A `save_to` field is ignored:
-every image lands in the configured images folder.
+example a size it replaced, and every body field the route did not use
+(`ignored: <field>`). `fellBackFrom` names the models that were
+unavailable when a backup model was used. A `save_to` field is not
+used: every image lands in the configured images folder.
 
 | Status | Meaning |
 |---|---|
@@ -2426,7 +2429,7 @@ Returns `{enabled: false, reason}` when it is off. Otherwise:
 | Field | Meaning |
 |---|---|
 | `active`, `limit` | Jobs running now and the most allowed at once (`videoGen.maxConcurrent`). |
-| `models` | `[{name, label, model, provider, wire, media}]`. `media` lists the input files the model takes, by type: `{kind, max?, min?, max_seconds?}`. |
+| `models` | `[{name, label, model, provider, wire, media, params}]`. `media` lists the input files the model takes, by type: `{kind, max?, min?, max_seconds?}`. `params` lists its parameters as the provider catalog or `allow.parameters` describes them: `{type?, values?, min?, max?, default?, note?}` per name. |
 | `jobs` | Each `{id, providerJobId, modelName, provider, prompt, specs, status, progress?, queuePosition?, error?, createdAt, updatedAt, mediaId?, path?, agent?, session?, references?}`. |
 
 A job's `status` is `queued`, `in_progress`, `completed` or `failed`.
@@ -2442,17 +2445,19 @@ Starts a job.
 | `prompt` | yes | What to show. |
 | `model` | no | A configured model name. |
 | `seconds`, `size`, `aspect_ratio`, `audio`, `quality`, `seed` | no | Specs. |
-| `reference_images` | no | Images as base64 strings: one is the opening frame, two are opening and closing frame. |
+| `extra` | no | The model's own parameters, for example `{"subject": "right"}`. Checked against what the model takes, like the specs. |
+| `reference_images` | no | Images as base64 strings or `{data, filename}`: one is the opening frame, two are opening and closing frame. |
 | `media` | no | Input files by meaning: `[{type, data, filename?, seconds?, strength?}]`, `data` in base64 or as a `data:` URI. Types as in the video guide, "Input files". Not together with `reference_images`. |
 | `agent`, `session` | no | Who is woken when the job ends. |
 
-Returns `{job}`. Follow it with `GET /video/status`.
+Returns `{job}`. Follow it with `GET /video/status`. A body field the
+route did not use is listed in `job.warnings` as `ignored: <field>`.
 
 | Status | Meaning |
 |---|---|
-| `400` | A bad request. |
+| `400` | A bad request, or the provider refused it with a `4xx` other than `401`, `403` and `429`. The provider's message is passed on. |
 | `429` | All job slots are busy. |
-| `502` | The provider failed. |
+| `502` | The provider failed, or refused for authentication or rate limits. |
 | `503` | Video is off, or the model is not available right now. |
 
 ## Voice

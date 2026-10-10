@@ -25,6 +25,7 @@ import {
   type ImageRecordDto,
   type MediaRecordDto,
   type GenerateVideoBody,
+  type ModelParamInfo,
   type VideoMediaSummary,
   type VideoStatusResponse,
   type ImagesStatus,
@@ -102,6 +103,7 @@ export function MediaWindow() {
   /** Files picked for the video form, by media type. Cleared when the
    *  model changes, because another model takes other inputs. */
   const [videoFiles, setVideoFiles] = useState<Record<string, File[]>>({});
+  const [videoParams, setVideoParams] = useState<Record<string, string>>({});
   /** Bumped to empty the file pickers themselves (they are uncontrolled). */
   const [pickerReset, setPickerReset] = useState(0);
   const [reloadTick, setReloadTick] = useState(0);
@@ -250,6 +252,8 @@ export function MediaWindow() {
     return () => window.removeEventListener('focus', onFocus);
   }, []);
 
+  const selectedVideoModel = (video?.models ?? []).find((m) => m.name === (videoModel || video?.models?.[0]?.name));
+
   const generateVideo = useCallback(async () => {
     if (!prompt.trim() || busy) return;
     setBusy(true);
@@ -267,6 +271,7 @@ export function MediaWindow() {
         ...(videoModel ? { model: videoModel } : {}),
         ...(seconds.trim() ? { seconds: Number(seconds.trim()) } : {}),
         ...(videoSpecs.aspect_ratio ? { aspect_ratio: videoSpecs.aspect_ratio } : {}),
+        ...videoParamBody(videoParams, selectedVideoModel?.params),
         ...(media.length > 0 ? { media } : {}),
       });
       setVideoFiles({});
@@ -278,7 +283,7 @@ export function MediaWindow() {
     } finally {
       setBusy(false);
     }
-  }, [prompt, busy, videoModel, seconds, videoSpecs, videoFiles]);
+  }, [prompt, busy, videoModel, seconds, videoSpecs, videoFiles, videoParams, selectedVideoModel]);
 
   const generate = useCallback(async () => {
     if (!prompt.trim() || busy) return;
@@ -401,6 +406,7 @@ export function MediaWindow() {
               onChange={(e) => {
                 setVideoModel(e.target.value);
                 setVideoFiles({});
+                setVideoParams({});
                 setPickerReset((n) => n + 1);
               }}
               style={inputStyle}
@@ -468,9 +474,14 @@ export function MediaWindow() {
                 ))}
               </select>
             </label>
+            <VideoParamInputs
+              params={selectedVideoModel?.params}
+              values={videoParams}
+              onChange={(name, value) => setVideoParams((v) => ({ ...v, [name]: value }))}
+            />
             <VideoMediaInputs
               key={pickerReset}
-              media={(video?.models ?? []).find((m) => m.name === (videoModel || video?.models?.[0]?.name))?.media}
+              media={selectedVideoModel?.media}
               files={videoFiles}
               onChange={(type, files) => setVideoFiles((v) => ({ ...v, [type]: files }))}
             />
@@ -775,24 +786,13 @@ export function MediaWindow() {
                   }}
                 >
                   <div style={{ position: 'relative' }}>
-                    {/* A video tile shows its still. Without one there
-                        is nothing to show — an inline <video> per tile
-                        would fetch every render just to draw a grid. */}
-                    <img
-                      src={
-                        img.kind === 'video'
-                          ? `/media/${img.id}/thumb`
-                          : `/media/${img.id}/file`
-                      }
+                    {/* A video tile shows its still. Without one it falls
+                        back to the video's own first frame — metadata
+                        and one frame, not the whole render. */}
+                    <MediaTileStill
+                      id={img.id}
+                      video={img.kind === 'video'}
                       alt={img.prompt}
-                      loading="lazy"
-                      style={{
-                        width: '100%',
-                        aspectRatio: '1 / 1',
-                        objectFit: 'cover',
-                        display: 'block',
-                        background: 'var(--bg-3)',
-                      }}
                     />
                     {img.kind === 'video' && (
                       <span
@@ -1069,6 +1069,108 @@ function readAsDataUrl(file: File): Promise<string> {
 
 /** One file picker per input the chosen video model takes. Exported for
  *  media-render.test.mts. */
+const tileStillStyle: React.CSSProperties = {
+  width: '100%',
+  aspectRatio: '1 / 1',
+  objectFit: 'cover',
+  display: 'block',
+  background: 'var(--bg-3)',
+};
+
+/** A gallery tile's picture. */
+export function MediaTileStill({ id, video, alt }: { id: string; video: boolean; alt: string }) {
+  const [noStill, setNoStill] = useState(false);
+  if (video && noStill) {
+    return <video src={`/media/${id}/file#t=0.1`} preload="metadata" muted playsInline style={tileStillStyle} />;
+  }
+  return (
+    <img
+      src={video ? `/media/${id}/thumb` : `/media/${id}/file`}
+      alt={alt}
+      loading="lazy"
+      onError={video ? () => setNoStill(true) : undefined}
+      style={tileStillStyle}
+    />
+  );
+}
+
+/** Parameters with a control of their own above, or that are not
+ *  request fields (a reference-image count). */
+const PARAMS_WITH_OWN_CONTROL = new Set(['seconds', 'aspect_ratio', 'input_references', 'n']);
+
+/** The fields somora names itself, sent at the top level with their
+ *  type; everything else goes to the provider untouched in `extra`. */
+const NAMED_BOOLEAN = new Set(['audio', 'quality']);
+const NAMED_NUMBER = new Set(['seed', 'seconds']);
+const NAMED_STRING = new Set(['size', 'aspect_ratio']);
+
+/** The chosen parameter values as request fields. An empty choice means
+ *  "the model's default" and is not sent. */
+export function videoParamBody(
+  values: Record<string, string>,
+  params: Record<string, ModelParamInfo> | undefined,
+): Pick<GenerateVideoBody, 'extra'> & Record<string, unknown> {
+  const top: Record<string, unknown> = {};
+  const extra: Record<string, unknown> = {};
+  for (const [name, raw] of Object.entries(values)) {
+    if (raw === '' || !params?.[name]) continue;
+    const info = params[name]!;
+    if (NAMED_BOOLEAN.has(name)) top[name] = raw === 'true';
+    else if (NAMED_NUMBER.has(name)) top[name] = Number(raw);
+    else if (NAMED_STRING.has(name)) top[name] = raw;
+    else extra[name] = info.type === 'range' && raw.trim() !== '' && Number.isFinite(Number(raw)) ? Number(raw) : raw;
+  }
+  return { ...top, ...(Object.keys(extra).length > 0 ? { extra } : {}) };
+}
+
+/** A control per parameter the model's provider describes: a list for
+ *  `enum`, a number field for `range`, a text field otherwise. Nothing
+ *  here knows any particular parameter — the catalog says what exists. */
+export function VideoParamInputs({
+  params,
+  values,
+  onChange,
+}: {
+  params: Record<string, ModelParamInfo> | undefined;
+  values: Record<string, string>;
+  onChange: (name: string, value: string) => void;
+}) {
+  const entries = Object.entries(params ?? {}).filter(([name]) => !PARAMS_WITH_OWN_CONTROL.has(name));
+  if (entries.length === 0) return null;
+  return (
+    <>
+      {entries.map(([name, info]) => {
+        const def = info.default !== undefined ? ` (${String(info.default)})` : '';
+        const value = values[name] ?? '';
+        return (
+          <label key={name} style={labelStyle} data-testid={`video-param-${name}`}>
+            {name.replace(/_/g, ' ')}
+            {info.type === 'enum' && info.values && info.values.length > 0 ? (
+              <select value={value} onChange={(e) => onChange(name, e.target.value)} style={inputStyle}>
+                <option value="">— model default{def} —</option>
+                {info.values.map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type={info.type === 'range' ? 'number' : 'text'}
+                {...(info.type === 'range' && info.min !== undefined ? { min: info.min } : {})}
+                {...(info.type === 'range' && info.max !== undefined ? { max: info.max } : {})}
+                value={value}
+                onChange={(e) => onChange(name, e.target.value)}
+                placeholder={`model default${def}`}
+                style={inputStyle}
+              />
+            )}
+            {info.note && <span style={hintStyle}>{info.note}</span>}
+          </label>
+        );
+      })}
+    </>
+  );
+}
+
 export function VideoMediaInputs({
   media,
   files,

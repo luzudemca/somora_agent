@@ -18,7 +18,7 @@ import type { Config, ImageModel, Provider } from '../config/types.ts';
 import { resolveImageModel } from '../config/types.ts';
 import { logger } from '../server/logger.ts';
 import { ratioMismatch, requestedRatio, translateAspectForOpenAiWire } from './aspect.ts';
-import { applyDefaults, resolveCapabilities, validateSpecs } from '../media/capabilities.ts';
+import { applyDefaults, forgetCatalog, resolveCapabilities, validateSpecs } from '../media/capabilities.ts';
 import { linkMedia, storeMedia } from '../media/store.ts';
 import { parseSizeSpec, readDimensions } from '../multimodal/dimensions.ts';
 import { newMediaId, writeRecord } from '../media/records.ts';
@@ -581,17 +581,27 @@ async function generateOnce(
     );
   }
 
-  const caps = await resolveCapabilities(providerName, provider, entry);
-  const specs = applyDefaults(input.specs ?? {}, entry, caps);
-  const problems = validateSpecs(specs, caps, label);
-
   const references = input.references ?? [];
-  if (caps.maxReferences !== undefined && references.length > caps.maxReferences) {
-    problems.push(
-      caps.maxReferences === 0
-        ? `${label} does not work from reference images — drop reference_images, or pick a model that does.`
-        : `${references.length} reference images passed, but ${label} accepts at most ${caps.maxReferences}.`,
-    );
+  const check = (caps: ModelCapabilities) => {
+    const specs = applyDefaults(input.specs ?? {}, entry, caps);
+    const problems = validateSpecs(specs, caps, label);
+    if (caps.maxReferences !== undefined && references.length > caps.maxReferences) {
+      problems.push(
+        caps.maxReferences === 0
+          ? `${label} does not work from reference images — drop reference_images, or pick a model that does.`
+          : `${references.length} reference images passed, but ${label} accepts at most ${caps.maxReferences}.`,
+      );
+    }
+    return { specs, problems };
+  };
+  let caps = await resolveCapabilities(providerName, provider, entry);
+  let { specs, problems } = check(caps);
+  // Refused on what the catalog said? It may have changed since it was
+  // read — ask once more before telling the caller no.
+  if (problems.length > 0 && caps.source === 'catalog') {
+    forgetCatalog(providerName, entry.capabilitiesEndpoint);
+    caps = await resolveCapabilities(providerName, provider, entry);
+    ({ specs, problems } = check(caps));
   }
   if (problems.length > 0) throw new ImageGenError(problems.join('\n'), 'input');
 

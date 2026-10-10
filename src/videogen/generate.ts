@@ -12,12 +12,13 @@ import type { Config, VideoModel } from '../config/types.ts';
 import { resolveVideoModel } from '../config/types.ts';
 import type { OpenAiCompatibleProvider } from '../config/types.ts';
 import { logger } from '../server/logger.ts';
-import { resolveCapabilities, validateSpecs } from '../media/capabilities.ts';
+import { forgetCatalog, paramInfos, resolveCapabilities, validateSpecs } from '../media/capabilities.ts';
 import type { ModelCapabilities } from '../imagegen/types.ts';
 import { linkMedia, storeMedia } from '../media/store.ts';
 import { newMediaId, writeRecord } from '../media/records.ts';
 import type { MediaRecord } from '../media/types.ts';
 import { readVideoMeta } from '../multimodal/dimensions.ts';
+import { extractFrame } from './frame.ts';
 import type { ReferenceImage } from '../imagegen/generate.ts';
 import {
   dialectFor,
@@ -104,6 +105,8 @@ async function capsFor(
       source: 'config',
       values: values as ModelCapabilities['values'],
       ...(entry.allow.supported ? { supported: entry.allow.supported } : {}),
+      ...(entry.allow.parameters ? { params: paramInfos(entry.allow.parameters) } : {}),
+      ...(entry.allow.variants ? { variants: entry.allow.variants } : {}),
       ...(entry.allow.maxReferences !== undefined
         ? { maxReferences: entry.allow.maxReferences }
         : {}),
@@ -118,15 +121,21 @@ async function capsFor(
   } as never);
 }
 
+/** What a configured model accepts — from its `allow` block or its
+ *  provider's catalog. Unknown when the model or provider is unusable. */
+export async function videoModelCapabilities(config: Config, name: string): Promise<ModelCapabilities> {
+  const resolved = resolveVideoModel(config, name);
+  const unknown: ModelCapabilities = { known: false, source: 'unknown', values: {} };
+  if (!resolved || resolved.provider.engine !== 'openai-compatible') return unknown;
+  return capsFor(resolved.providerName, resolved.provider as OpenAiCompatibleProvider, resolved.entry).catch(() => unknown);
+}
+
 /** The input files a configured model takes, as clients show them
  *  (GET /video/status). Empty when the model or its provider is unusable. */
 export async function videoModelMedia(config: Config, name: string): Promise<ReturnType<typeof describeSlots>> {
   const resolved = resolveVideoModel(config, name);
   if (!resolved || resolved.provider.engine !== 'openai-compatible') return {};
-  const caps: ModelCapabilities = await capsFor(resolved.providerName, resolved.provider as OpenAiCompatibleProvider, resolved.entry).catch(
-    (): ModelCapabilities => ({ known: false, source: 'unknown', values: {} }),
-  );
-  return describeSlots(mediaSlots(resolved.entry, caps));
+  return describeSlots(mediaSlots(resolved.entry, await videoModelCapabilities(config, name)));
 }
 
 /** Which content flavours this model serves. The catalog answers it;
@@ -163,22 +172,33 @@ export async function startVideoJob(input: StartInput, config: Config): Promise<
   const slot = await checkSlot(config);
   if (!slot.ok) throw new VideoGenError(slot.reason!, 'busy');
 
-  const caps = await capsFor(providerName, provider, entry);
   const specs: Record<string, unknown> = { ...entry.defaults, ...(input.specs ?? {}) };
-  const problems = validateSpecs(specs as never, caps, label);
   const references = input.references ?? [];
   if (references.length > 0 && (input.media?.length ?? 0) > 0) {
     throw new VideoGenError('Pass input files either as reference_images or as media, not both.', 'input');
   }
   const items = input.media ?? mediaFromReferences(references);
-  const media = checkMedia(items, entry, caps, label);
-  problems.push(...media.problems);
-  if (caps.maxReferences !== undefined && references.length > caps.maxReferences) {
-    problems.push(
-      caps.maxReferences === 0
-        ? `${label} does not work from reference images — drop reference_images, or pick a model that does.`
-        : `${references.length} reference images passed, but ${label} accepts at most ${caps.maxReferences}.`,
-    );
+  const check = (caps: ModelCapabilities) => {
+    const problems = validateSpecs(specs as never, caps, label);
+    const media = checkMedia(items, entry, caps, label);
+    problems.push(...media.problems);
+    if (caps.maxReferences !== undefined && references.length > caps.maxReferences) {
+      problems.push(
+        caps.maxReferences === 0
+          ? `${label} does not work from reference images — drop reference_images, or pick a model that does.`
+          : `${references.length} reference images passed, but ${label} accepts at most ${caps.maxReferences}.`,
+      );
+    }
+    return { problems, media };
+  };
+  let caps = await capsFor(providerName, provider, entry);
+  let { problems, media } = check(caps);
+  // Refused on what the catalog said? It may have changed since it was
+  // read — ask once more before telling the caller no.
+  if (problems.length > 0 && caps.source === 'catalog') {
+    forgetCatalog(providerName, entry.capabilitiesEndpoint);
+    caps = await capsFor(providerName, provider, entry);
+    ({ problems, media } = check(caps));
   }
   if (problems.length > 0) throw new VideoGenError(problems.join('\n'), 'input');
 
@@ -221,7 +241,21 @@ export async function startVideoJob(input: StartInput, config: Config): Promise<
         'unavailable',
       );
     }
-    throw new VideoGenError(`Video upstream returned ${res.status}: ${text.slice(0, 300)}`, 'upstream');
+    // A 4xx is the provider refusing THIS request — a value, a file, a
+    // missing field. The caller can fix it, and a retry of the same
+    // request cannot; reporting it as a broken upstream invited exactly
+    // that retry. Auth, permission and rate limits stay upstream trouble.
+    const refused = res.status >= 400 && res.status < 500 && ![401, 403, 429].includes(res.status);
+    // A provider that wants JSON says so in words somora cannot act on
+    // by itself; the operator can, in one line of config.
+    const sentMultipart = !built.contentType;
+    const hint = sentMultipart && (res.status === 415 || /application\/json|content-type/i.test(text))
+      ? ` The files went as multipart form data; if this provider takes JSON, set transport: json on videoGen.models '${entry.name}' (docs/videogen.md).`
+      : '';
+    throw new VideoGenError(
+      `Video ${refused ? 'provider refused the request' : 'upstream returned'} ${res.status}: ${text.slice(0, 300)}${hint}`,
+      refused ? 'input' : 'upstream',
+    );
   }
 
   const payload = (await res.json()) as Record<string, unknown>;
@@ -434,6 +468,25 @@ async function collect(job: VideoJob, state: JobState, config: Config): Promise<
       }
     } catch (err) {
       logger.debug({ msg: 'videogen.thumbnail_failed', job: job.id, err: (err as Error).message });
+    }
+  }
+  // No still from the provider: cut one, a tenth of the way in.
+  if (!thumbPath) {
+    const frame = await extractFrame(stored.path, (meta?.durationSec ?? 0) * 0.1);
+    if (frame) {
+      const t = await storeMedia({
+        bytes: frame,
+        prompt: job.prompt,
+        config,
+        kind: 'video',
+        declaredMime: 'image/jpeg',
+        filenameStem: stored.filename.replace(/\.[^.]+$/, '') + '-thumb',
+        now,
+      });
+      thumbPath = t.path;
+      thumbMime = t.mime;
+    } else {
+      logger.debug({ msg: 'videogen.local_thumbnail_unavailable', job: job.id });
     }
   }
 
