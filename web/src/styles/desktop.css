@@ -383,11 +383,6 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
   color: var(--text-3);
   font-family: 'JetBrains Mono', monospace;
 }
-/* the daily update check found a newer version */
-.taskbar-update {
-  color: var(--accent, #7dd3fc);
-  font-weight: 600;
-}
 
 .taskbar-windows {
   display: flex;
@@ -2199,3 +2194,52 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
   color: rgba(170, 170, 180, 0.9);
   letter-spacing: 0.03em;
 }
+
+/* Inbox (InboxMenu): opens up from the taskbar, right-aligned. */
+.inbox-menu {
+  left: auto;
+  right: 0;
+  width: 380px;
+  max-width: calc(100vw - 24px);
+  max-height: 60vh;
+  overflow-y: auto;
+  gap: 6px;
+}
+.inbox-head { padding: 4px 6px 2px; font-size: 12px; font-weight: 600; color: var(--text-1); }
+.inbox-empty { padding: 8px 6px 10px; font-size: 12px; color: var(--text-2); }
+.inbox-badge.calm { background: var(--accent, #5cf2d6); color: #0a0f0c; }
+.inbox-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 9px;
+  border-radius: 7px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  font-size: 12px;
+  color: var(--text-0);
+}
+.inbox-entry.unread { border-color: rgba(92,242,214,0.35); }
+.inbox-entry.level-important { border-left: 3px solid var(--danger); }
+.inbox-entry.level-warning { border-left: 3px solid var(--warn, #e0a94a); }
+.inbox-entry.resolved { opacity: 0.55; }
+.inbox-title { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
+.inbox-when { flex: none; font-weight: 400; color: var(--text-3); font-size: 11px; }
+.inbox-text { color: var(--text-1); white-space: pre-wrap; word-break: break-word; line-height: 1.45; }
+.inbox-text code { font-family: 'JetBrains Mono', monospace; font-size: 11px; background: rgba(255,255,255,0.06); padding: 0 4px; border-radius: 4px; }
+.inbox-text a, .inbox-link { color: var(--accent, #5cf2d6); word-break: break-all; }
+.inbox-link { font-size: 11px; }
+.inbox-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--text-3); font-size: 11px; }
+.inbox-meta button, .inbox-muted-row button, .inbox-muted-toggle {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 5px;
+  color: var(--text-2);
+  font-size: 11px;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+.inbox-muted { display: flex; flex-direction: column; gap: 4px; padding: 4px 2px 2px; }
+.inbox-muted-toggle { margin-left: 0; align-self: flex-start; border: 0; padding: 2px 4px; }
+.inbox-muted-row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-2); padding: 0 4px; }

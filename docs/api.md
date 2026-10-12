@@ -188,6 +188,38 @@ The running version and what the daily update check found.
 | `update.available` | `true` when `latestVersion` is newer than `version`. |
 | `update.note` | Optional hint that comes with the release. |
 
+### `GET /inbox`
+
+What the web client's inbox shows: a newer version, somora.ai's note,
+and conditions that need a person (a broken `config.yaml`, an expired
+login, the certificate, failing dream runs, a tool server or model
+gone for a day).
+
+```json
+{ "entries": [ { "key": "config", "kind": "config", "level": "important",
+    "title": "config.yaml has a mistake", "text": "…",
+    "firstSeen": 1791821926940, "lastSeen": 1791822226940, "count": 1 } ],
+  "unread": 1, "muted": [] }
+```
+
+| Field | Meaning |
+|---|---|
+| `key` | Stable per thing, e.g. `update:<version>`, `news:<hash>`, `config`, `login:claude-cli`, `login:openai-compatible:<provider>`, `login:mcp:<server>`, `tls`, `rem:<agent>`, `deep:<agent>/<slug>`, `lucid`, `mcp:<server>`, `model:<provider/id>`. |
+| `kind` | `update`, `news`, `config`, `login`, `tls`, `dream`, `mcp`, `model`. |
+| `level` | `info`, `warning`, `important`. |
+| `title`, `text`, `url?` | Plain text. `url` is `https://` only. |
+| `firstSeen`, `lastSeen`, `count` | Epoch ms; `count` counts events, a checked state stays `1`. |
+| `readAt?`, `resolvedAt?`, `muted?` | `muted` is `until-resolved` or `forever`. Resolved entries stay a day. |
+
+### `POST /inbox/read`
+
+Body `{ "keys": [...] }`, or `{}` for all. Answers `{ ok, unread }`.
+
+### `POST /inbox/mute` · `POST /inbox/unmute`
+
+Body `{ "key": "…", "mode": "until-resolved" | "forever" }` for mute,
+`{ "key": "…" }` for unmute. `404` for an unknown key.
+
 ### `GET /healthz`
 
 Liveness probe. Answers the plain text `ok` with status 200. Use it to

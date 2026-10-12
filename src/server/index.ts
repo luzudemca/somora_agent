@@ -178,13 +178,15 @@ import { injectMemoryContext } from '../memory/inject.ts';
 import { configureBrowserService, getBrowserService, BrowserOpError, processIdOf } from '../browser/service.ts';
 import { ScreencastRegistry, applyViewerInput, isBrowserOpError, type ViewerSocket } from '../browser/screencast.ts';
 import { runBrowserOp, type BrowserOp } from '../tools/browser/ops.ts';
-import { logger } from './logger.ts';
+import { logger, onLog } from './logger.ts';
 import { startToolOutputSweeper } from '../tools/tool-output.ts';
 import { reconcileInterruptedTurns, restartParentWakeText, restartWakeText } from './restart-reconcile.ts';
 import { getLspManager, shutdownLsp } from '../lsp/index.ts';
 import { findBinary, LSP_SERVERS } from '../lsp/registry.ts';
 import { pushSteer, steerableTurn } from './steer-inbox.ts';
-import { configureModelAvailability, modelUnavailable, resetModelAvailability } from '../engine/model-availability.ts';
+import { configureModelAvailability, listUnavailableModels, modelUnavailable, resetModelAvailability } from '../engine/model-availability.ts';
+import { Inbox } from './inbox.ts';
+import { inboxFromLog, inboxFromState } from './inbox-sources.ts';
 import { DEFAULT_PLAN_FILE, archiveNameFor, builderSessionAllows, patchBuilderState, readBuilderState, type BuilderMode, type BuilderPhase, type TodoItem } from './builder-session.ts';
 import { workdirFromMeta } from './session-workdir.ts';
 import { claimOfSession, describeClaim, listWorkdirClaims, workdirClaimedBy } from './builder-busy.ts';
@@ -657,6 +659,12 @@ if (mcpHub.enabled) {
 }
 
 const app = new Hono();
+
+// The inbox (src/server/inbox.ts): notices for the person running
+// somora. Reads the log from here on; the state check starts below,
+// next to the update check it reads.
+const inbox = new Inbox();
+onLog((_level, line) => inboxFromLog(inbox, line));
 
 app.use('*', async (c, next) => {
   const start = Date.now();
@@ -1865,6 +1873,51 @@ const updateChecker = new UpdateChecker({
   log: logger,
 });
 updateChecker.start();
+
+function checkInboxState(): void {
+  inboxFromState(inbox, {
+    version: SOMORA_VERSION,
+    update: () => {
+      const u = updateChecker.status();
+      return { updateAvailable: u.updateAvailable, latestVersion: u.latestVersion, note: u.note, enabled: u.enabled };
+    },
+    configProblem: () => currentConfigProblem(),
+    mcpServers: () => (mcpHub.enabled ? mcpHub.status() : {}),
+    unavailableModels: () => listUnavailableModels(),
+  });
+}
+setTimeout(checkInboxState, 30_000).unref();
+setInterval(checkInboxState, 5 * 60_000).unref();
+
+// GET /inbox — what the inbox shows, and how much is unread.
+app.get('/inbox', async (c) => {
+  // A config.yaml broken a moment ago shows up here, not 5 minutes later.
+  await getFreshConfig().catch(() => undefined);
+  checkInboxState();
+  return c.json({ entries: inbox.list(), unread: inbox.unread(), muted: inbox.muted() });
+});
+
+// POST /inbox/read {keys?} — mark these (or all) as read.
+app.post('/inbox/read', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { keys?: unknown };
+  const keys = Array.isArray(body.keys) ? body.keys.filter((k): k is string => typeof k === 'string') : undefined;
+  inbox.markRead(keys);
+  return c.json({ ok: true, unread: inbox.unread() });
+});
+
+// POST /inbox/mute {key, mode} — "don't report again": until the thing
+// resolved once, or forever. POST /inbox/unmute {key} undoes it.
+app.post('/inbox/mute', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { key?: unknown; mode?: unknown };
+  const mode = body.mode === 'forever' ? 'forever' : 'until-resolved';
+  if (typeof body.key !== 'string' || !inbox.mute(body.key, mode)) return c.json({ error: 'no such inbox entry' }, 404);
+  return c.json({ ok: true, unread: inbox.unread() });
+});
+app.post('/inbox/unmute', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { key?: unknown };
+  if (typeof body.key !== 'string' || !inbox.unmute(body.key)) return c.json({ error: 'no such muted entry' }, 404);
+  return c.json({ ok: true, unread: inbox.unread() });
+});
 
 /** Version plus, when known, what somora.ai says is current. */
 app.get('/version', (c) => {

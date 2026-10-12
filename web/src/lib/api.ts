@@ -289,6 +289,22 @@ export interface MediaRecordDto extends ImageRecordDto {
   thumbMime?: string;
 }
 
+/** One notice in the inbox (GET /inbox). */
+export interface InboxEntryDto {
+  key: string;
+  kind: 'update' | 'news' | 'config' | 'login' | 'tls' | 'dream' | 'mcp' | 'model';
+  level: 'info' | 'warning' | 'important';
+  title: string;
+  text: string;
+  url?: string;
+  firstSeen: number;
+  lastSeen: number;
+  count: number;
+  readAt?: number;
+  resolvedAt?: number;
+  muted?: 'until-resolved' | 'forever';
+}
+
 export interface MediaListResponse {
   total: number;
   offset: number;
@@ -1256,6 +1272,16 @@ export const api = {
   },
 
   // ─── Media (images + video, one gallery) ───────────────────────────
+  inbox: () => getJson<{ entries: InboxEntryDto[]; unread: number; muted: InboxEntryDto[] }>('/inbox'),
+  inboxRead: async (keys?: string[]) => {
+    await fetch('/inbox/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(keys ? { keys } : {}) });
+  },
+  inboxMute: async (key: string, mode: 'until-resolved' | 'forever') => {
+    await fetch('/inbox/mute', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, mode }) });
+  },
+  inboxUnmute: async (key: string) => {
+    await fetch('/inbox/unmute', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) });
+  },
   media: (params: MediaListParams = {}) => {
     const q = new URLSearchParams();
     for (const [key, value] of Object.entries(params)) {

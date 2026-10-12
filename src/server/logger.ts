@@ -84,5 +84,35 @@ if (isTty) {
 }
 const transport = pino.transport({ targets });
 
-export const logger: Logger = pino({ level, base: undefined }, transport);
+// Listeners that read structured log lines as they are written — the
+// inbox (src/server/inbox-sources.ts) turns some of them into notices.
+// A listener must be cheap and must not throw; it never changes the line.
+type LogListener = (level: number, line: Record<string, unknown>) => void;
+const logListeners = new Set<LogListener>();
+export function onLog(listener: LogListener): () => void {
+  logListeners.add(listener);
+  return () => logListeners.delete(listener);
+}
+
+export const logger: Logger = pino(
+  {
+    level,
+    base: undefined,
+    hooks: {
+      logMethod(args, method, lvl) {
+        if (logListeners.size > 0 && args[0] && typeof args[0] === 'object') {
+          for (const l of logListeners) {
+            try {
+              l(lvl, args[0] as Record<string, unknown>);
+            } catch {
+              /* a listener never breaks logging */
+            }
+          }
+        }
+        return method.apply(this, args as Parameters<typeof method>);
+      },
+    },
+  },
+  transport,
+);
 export const SOMORA_HOME_DIR = SOMORA_HOME;

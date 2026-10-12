@@ -364,15 +364,17 @@ Cmd+Shift+R on a Mac, so the browser drops the old script.
 ## The daily update check
 
 Once a day the server asks somora.ai whether a newer version exists.
-It is the only request somora makes on its own. The answer shows up as
-a notice in the web client's taskbar, in `somora server status` and in
-the server log as `update.available`. `somora update` itself asks npm.
+It is the only request somora makes on its own. The answer shows up in
+the web client's inbox, in `somora server status` and in the server
+log as `update.available`. `somora update` itself asks npm.
 
 The request is a plain `GET https://somora.ai/api/latest-version`. It
 has no body and no identifier. Its `User-Agent` names the somora
 version, the operating system, the Node.js version and the CPU type.
 The answer is `{"version": "…", "note": "…"}`. The note is an optional
-sentence to all installs, 500 characters at most.
+sentence to all installs, 500 characters at most. It appears in the
+inbox as a message from somora.ai, as plain text, and never reaches an
+agent. With the update check off there are no messages either.
 
 Like any web server, somora.ai logs the request with its IP address and
 the rough location derived from it, and counts installations per day,

@@ -145,10 +145,11 @@ The bar at the bottom always stays on top. From left to right:
 
 | Part | What it does |
 |---|---|
-| Koala, name and version | The somora mascot and the server version. When a newer version exists it reads `· update <version>`. |
+| Koala, name and version | The somora mascot and the server version. |
 | `Browser · N waiting for you` | Appears when an agent handed the shared browser to you. Opens the browser list. |
 | Window buttons | One per open window, in the agent's colour. Click to focus or bring back a minimized window. |
-| Gear | Server menu: reload config, restart. |
+| Inbox | Updates, messages from somora.ai and things that need you, with a count of what is new. See "Inbox". |
+| Gear | Server menu: reload config, restart, sign out. |
 | **Arrange** | Tiles all windows that are not minimized. |
 | **Save** and **Restore** | Stores the current layout as a snapshot and brings it back later. |
 | **Fullscreen** | Switches the browser to full screen. Hidden where the browser cannot do it. |
@@ -192,11 +193,35 @@ Which sessions are woken is set by `server.resumeAfterRestart`. A
 session is not woken a third time within ten minutes, so a failing
 restart cannot loop.
 
-### Update notice
+### Inbox
 
-somora checks once a day whether a newer version exists. If so, the
-taskbar shows `· update <version>` next to the running version, and the
-gear menu repeats it. Run `somora update` to install it.
+The tray icon left of the gear is the inbox. A number on it counts
+what is new: red when something needs you, green otherwise. Opening
+the inbox marks everything in it as read.
+
+| What arrives | When it goes |
+|---|---|
+| A newer somora version, with `somora update` and the release notes | The update is installed. |
+| A message from somora.ai (the note of the daily update check) | somora.ai sends another one, or none. |
+| `config.yaml` has a mistake, with the problem | The file validates again. |
+| Claude, Codex or Grok wants a new login; a provider refuses its key; a tool server wants a new login | The next turn on it works. |
+| The HTTPS certificate could not be renewed or runs out soon | A fresh certificate is loaded. |
+| REM failed three runs in a row for an agent; Deep could not place the same note three times; a Lucid run failed or was cut off | The next run succeeds. |
+| A tool server or a model has been unreachable for a day | It answers again. |
+
+One thing is one entry. More failures of the same thing only change
+its `since … · n×` line. An entry that resolved itself stays a day,
+greyed out, then goes.
+
+**Don't report again** keeps an entry quiet until its cause resolved
+once; if it comes back after that, it shows again. Use it for things
+you switched off on purpose, such as a tool server. **Hide** on an
+update or message hides that one. **Muted** at the bottom lists what
+is quiet, with **Report again**.
+
+The inbox is shared: read or muted on one browser is the same on all.
+Its text comes from somora and somora.ai only and never reaches an
+agent.
 
 ## Chat windows
 

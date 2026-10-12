@@ -14,6 +14,7 @@ import { api, type AgentInfo } from '../lib/api';
 import { resolveAgentColor } from '../lib/colors';
 import { sessionSlug } from '../lib/session-label';
 import { signOut } from './KeyGate';
+import { InboxMenu } from './InboxMenu';
 
 interface Props {
   onOpenBrowsers?: () => void;
@@ -40,7 +41,6 @@ export function Taskbar({
   const waiting = browserState.browsers.filter((b) => b.handoff);
   const [clock, setClock] = useState(new Date());
   const [version, setVersion] = useState<string | null>(null);
-  const [update, setUpdate] = useState<{ latestVersion: string; note?: string } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [hostStats, setHostStats] = useState<{ cpuPct: number; memPct: number } | null>(null);
   // Gear menu: reload config.yaml / restart the service. `toast` is the
@@ -180,8 +180,7 @@ export function Taskbar({
       .version()
       .then((r) => {
         setVersion(r.version);
-        // What somora.ai said is current (the daily update check), when newer.
-        setUpdate(r.update?.available ? { latestVersion: r.update.latestVersion, note: r.update.note } : null);
+        // A newer version and somora.ai's note live in the inbox now.
       })
       .catch(() => setVersion(null));
   }, []);
@@ -245,10 +244,7 @@ export function Taskbar({
         </div>
         <div>
           <div className="taskbar-logo-text">somora</div>
-          <div className="taskbar-logo-sub" title={update ? `Update to ${update.latestVersion} available — run \`somora update\`${update.note ? `. ${update.note}` : ''}` : undefined}>
-            {version ? `v${version}` : '—'}
-            {update ? <span className="taskbar-update"> · update {update.latestVersion}</span> : null}
-          </div>
+          <div className="taskbar-logo-sub">{version ? `v${version}` : '—'}</div>
         </div>
       </div>
 
@@ -324,6 +320,7 @@ export function Taskbar({
             {toast.text}
           </span>
         )}
+        <InboxMenu />
         <div className="taskbar-gear" ref={gearRef}>
           <button
             className="taskbar-tool"
@@ -389,7 +386,6 @@ export function Taskbar({
               </button>
               <div className="taskbar-menu-meta">
                 {version ? `v${version}` : ''}
-                {update ? ` · update ${update.latestVersion} available (somora update)` : ''}
                 {configStatus?.loadedAt
                   ? ` · config loaded ${new Date(configStatus.loadedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
                   : ''}
