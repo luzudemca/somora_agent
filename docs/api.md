@@ -100,7 +100,7 @@ accounts and no per-route permissions: the key opens everything.
 |---|---|
 | A program | `Authorization: Bearer <key>`, or `X-Somora-Key: <key>` where a tool cannot set `Authorization`. |
 | A browser | A cookie from `POST /auth/login`. It rides along on every request, stream and WebSocket. |
-| A script an agent writes | `-H "Authorization: Bearer $(somora key)"`. The key is not in the shell's environment, so `env` never shows it. |
+| A script an agent writes | `-H "Authorization: Bearer $(somora key)"`. The key is not in the shell's environment, so `env` does not show it, unless the command was started with `inherit_agent_env: true`. |
 
 `somora key` prints the key on the server. Never put it in a URL query:
 it would end up in logs and histories.
@@ -121,6 +121,12 @@ which hold no data.
 
 With `server.auth: off` in `config.yaml` the server asks for no key.
 Then access is decided by the network alone.
+
+A browser request that another website makes in the background is
+refused with `403` and a plain-text body, not JSON:
+`refused: <reason>. …`. A browser that reaches somora under a name of
+its own needs that name in `server.allowedHosts`. Programs that are not
+browsers are never checked. The security page explains the rule.
 
 > **Warning:** Never expose the port to the public internet, with or
 > without the key. The key protects a private network, it is not built
@@ -218,7 +224,8 @@ Body `{ "keys": [...] }`, or `{}` for all. Answers `{ ok, unread }`.
 ### `POST /inbox/mute` · `POST /inbox/unmute`
 
 Body `{ "key": "…", "mode": "until-resolved" | "forever" }` for mute,
-`{ "key": "…" }` for unmute. `404` for an unknown key.
+`{ "key": "…" }` for unmute. `mode` defaults to `until-resolved`.
+Both answer `{ ok, unread }`, or `404` for an unknown key.
 
 ### `GET /healthz`
 
@@ -697,7 +704,10 @@ chat window opens.
 | `limit` | no | Return only the last N events (1 to 2000, default 200 once paging is used). |
 | `before` | no | Epoch ms. Return events older than this. Pass the `oldestTs` of the previous page. |
 
-Without `limit` and `before` the whole session is returned.
+Without `limit` and `before` the whole session is returned, with
+`hasMore: false`. Events with the same `ts` are never split across
+pages, so a page can hold a few more than `limit`. `oldestTs` is left
+out when the page is empty.
 
 ```json
 { "agent": "<your-agent>",
@@ -2489,7 +2499,8 @@ the file left the disk.
 ### `GET /media/:id/thumb`
 
 A video's still image, `image/webp` unless the record says otherwise.
-Same behaviour as `/file`. `404` when there is none.
+Same behaviour as `/file`. A video without a still gets one cut on
+the first request. `404` only when that fails.
 
 ### `DELETE /media/:id`
 

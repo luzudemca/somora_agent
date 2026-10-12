@@ -131,3 +131,26 @@ test('rewritten pages keep the reading style', () => {
 test('the legacy list names only existing pages', () => {
   for (const p of LEGACY) assert.ok(pages.includes(p), `${p} is in LEGACY but not in docs/`);
 });
+
+test('README.md and CONTRIBUTING.md link only to files and sections that exist', () => {
+  const root = resolve(docs, '..');
+  const broken: string[] = [];
+  for (const file of ['README.md', 'CONTRIBUTING.md', '.github/SECURITY.md']) {
+    const from = resolve(root, file);
+    const body = withoutFences(readFileSync(from, 'utf8')).replace(/`[^`\n]*`/g, '');
+    for (const m of body.matchAll(/\]\(([^)\s]+)\)|href="([^"]+)"/g)) {
+      const target = (m[1] ?? m[2])!;
+      if (/^[a-z][a-z0-9+.-]*:/i.test(target)) continue;
+      const [path, anchor] = target.split('#') as [string, string | undefined];
+      const abs = path ? resolve(dirname(from), path) : from;
+      if (!existsSync(abs)) {
+        broken.push(`${file}: ${target} (no such file)`);
+        continue;
+      }
+      if (anchor && abs.endsWith('.md') && !anchorsOf(readFileSync(abs, 'utf8')).has(decodeURIComponent(anchor))) {
+        broken.push(`${file}: ${target} (no such section)`);
+      }
+    }
+  }
+  assert.deepEqual(broken, []);
+});

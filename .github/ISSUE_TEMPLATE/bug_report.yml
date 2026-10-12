@@ -1,0 +1,34 @@
+name: Bug report
+description: Something does not work as described.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce
+      description: The shortest way to make it happen again.
+  - type: input
+    id: version
+    attributes:
+      label: somora version
+      description: "`somora --version`"
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: System
+      description: Operating system, Node.js version (`node --version`), engine or model if it matters.
+  - type: textarea
+    id: log
+    attributes:
+      label: Log lines
+      description: "Relevant lines from `~/.somora/logs/` or the web client's log window. Remove keys, tokens and personal data."
+      render: text

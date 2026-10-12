@@ -39,8 +39,8 @@ models, your first agent, memory and HTTPS — details under
 | | |
 |---|---|
 | **One line** (recommended) | `curl -fsSL https://somora.ai/install.sh \| bash` |
-| **npm** — you already have Node ≥22.22.2 | `npm install -g somora && somora setup` |
-| **From source** — you want to work on somora itself | [docs/setup.md → Develop from a checkout](docs/setup.md#develop-from-a-checkout-contributors) |
+| **npm** — you already have Node ≥22.22.2 | [docs/setup.md → Install by hand](docs/setup.md#install-by-hand) (npm 12 needs one extra flag) |
+| **From source** — you want to work on somora itself | [docs/setup.md → Develop from a checkout](docs/setup.md#develop-from-a-checkout) |
 
 ## See it
 
@@ -182,7 +182,7 @@ somora makes one request of its own: once a day it asks somora.ai
 whether a newer version exists (version, OS, Node version and CPU in the
 User-Agent, nothing else; somora.ai counts installations from its
 server log). `DO_NOT_TRACK=1` or `updateCheck.enabled: false` switches it
-off — [docs/setup.md → The daily update check](docs/setup.md#the-daily-update-check--what-somoraai-sees).
+off — [docs/setup.md → The daily update check](docs/setup.md#the-daily-update-check).
 
 [docs/setup.md](docs/setup.md) is the full install walkthrough,
 [docs/models.md](docs/models.md) lists the models known to run with somora
@@ -216,7 +216,8 @@ to run again — as a whole or one step (`somora setup access`). Update
 later with `somora update`.
 
 Already have Node ≥22.22.2 and the tools from [Requirements](#requirements)?
-Then it is two commands: `npm install -g somora && somora setup`.
+Then follow [Install by hand](docs/setup.md#install-by-hand): one npm
+command, then `somora setup`.
 
 ### Already using a coding agent? Let it set up somora.
 
@@ -266,11 +267,12 @@ configuration options that the docs don't describe.
 
 ```bash
 # 1. Prereqs (see docs/setup.md for details per OS)
-sudo apt install tmux ripgrep build-essential   # Debian/Ubuntu
-# brew install tmux ripgrep                     # macOS (plus Xcode command line tools)
+sudo apt install tmux ripgrep git build-essential python3   # Debian/Ubuntu
+# brew install tmux ripgrep git                             # macOS (plus Xcode command line tools)
 
-# 2. Install somora
-npm install -g somora
+# 2. Install somora (npm older than 11.16: leave out the --allow-scripts line)
+ONNXRUNTIME_NODE_INSTALL=skip npm install -g somora \
+  --allow-scripts=cpu-features,esbuild,fsevents,node-pty,onnxruntime-node,protobufjs,somora,ssh2
 
 # 3. Log in to at least one LLM backend (pick one or more)
 somora auth login                         # Claude subscription; Claude Code is bundled
@@ -281,8 +283,8 @@ somora grok login                         # SuperGrok or Premium subscription; t
 
 # 4. First-run setup + start
 somora init                    # creates ~/.somora/ and registers the background service
-somora server start            # starts it (and from then on at boot / login)
-somora tui                     # the default agent is created on first run
+somora server start            # starts it (and from then on at boot / login); the default agent is created on first start
+somora tui                     # chat in the terminal
 somora key link                # sign the web client in (link + QR code for the phone)
 ```
 
@@ -291,7 +293,7 @@ name>"` writes `~/.somora/team.yaml` so every agent knows who is who — or
 arrange it in the **team** tile of the web client
 ([docs/team.md](docs/team.md)). The web client, providers and Tailscale
 HTTPS are in [docs/setup.md](docs/setup.md); hacking on somora itself in
-its [contributor section](docs/setup.md#develop-from-a-checkout-contributors).
+its [contributor section](docs/setup.md#develop-from-a-checkout).
 
 ## Status
 
@@ -363,8 +365,8 @@ Three first-party clients, all hitting the same local server:
 | Client | Launch | What you get |
 |---|---|---|
 | **TUI** | `somora tui` | Terminal multi-agent chat with full keyboard control, the session's queue (`/queue`), memory and tool detail toggles. |
-| **Web** | `https://<host>.<tailnet>.ts.net:18737/web/` | A browser desktop: one window per agent, drag-and-drop attachments and screenshots, tmux app and shell terminal, Wiki Explorer with link graph, Media gallery, Sessions browser, the agent's Chromium window, server log, Abilities matrix (which tools and skills each agent may use), Team and Agent windows, a queue badge per session (what runs, what waits, what is arriving — take back or stop from there), dictation and spoken replies, and a voice window for a live call. HTTPS required; sign in once with the server's key (`somora key link`). [docs/web.md](docs/web.md) |
-| **Mobile (PWA)** | `…:18737/mobile/`, then "Add to Home Screen" | The phone app: avatar row to switch agent, a sheet in the header to switch session and model or restore an archived session, the same queue sheet, voice input and spoken replies, photo/PDF attachments via the native picker. Signs in once by scanning the QR code from `somora key link`. [docs/mobile.md](docs/mobile.md) |
+| **Web** | `https://<host>.<tailnet>.ts.net:18737/web/` | A browser desktop: one window per agent, drag-and-drop attachments and screenshots, tmux app and shell terminal, Wiki Explorer with link graph, Media gallery, Sessions browser, the agent's Chromium window, server log, an inbox for updates and things that need you, a light or dark theme, Abilities matrix (which tools and skills each agent may use), Team and Agent windows, a queue badge per session (what runs, what waits, what is arriving — take back or stop from there), dictation and spoken replies, and a voice window for a live call. HTTPS required; sign in once with the server's key (`somora key link`). [docs/web.md](docs/web.md) |
+| **Mobile (PWA)** | `…:18737/mobile/`, then "Add to Home Screen" | The phone app: avatar row to switch agent, a sheet in the header to switch session and model or restore an archived session, the same queue sheet with steering, the thinking level per session, voice input and spoken replies, photo/PDF attachments via the native picker. Signs in once by scanning the QR code from `somora key link`. [docs/mobile.md](docs/mobile.md) |
 
 Anything else can talk to the server the same way the clients do, with
 the server's key in an `Authorization: Bearer` header:
@@ -381,6 +383,14 @@ and searchable: [docs.somora.ai](https://docs.somora.ai).
 - **What agents can do:** [tools](docs/tools.md) · [builders](docs/builder.md) · [language servers](docs/lsp.md) · [files](docs/files.md) · [tmux](docs/tmux.md) · [resources](docs/resources.md) · [skills](docs/skills.md) · [MCP servers](docs/mcp.md) · [projects](docs/projects.md) · [sentinel](docs/sentinel.md) · [browser](docs/browser.md) · [image generation](docs/imagegen.md) · [video generation](docs/videogen.md) · [decision models](docs/decisions.md) · [image handling](docs/image-handling.md)
 - **Clients and API:** [web](docs/web.md) · [mobile](docs/mobile.md) · [TUI display](docs/display.md) · [voice](docs/voice.md) · [realtime voice](docs/realtime-voice.md) · [API](docs/api.md)
 - **Models in detail:** [thinking](docs/thinking.md) · [sampling](docs/sampling.md)
+
+## Contributing
+
+Contributions are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) says how to
+report bugs, propose ideas and send pull requests. Security problems are
+reported privately: [SECURITY.md](.github/SECURITY.md). What changed in
+each version is in the
+[release notes](https://github.com/thenaxon/somora_agent/releases).
 
 ## License
 

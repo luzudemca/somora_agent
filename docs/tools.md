@@ -112,7 +112,7 @@ Toolsets `time` and `web`.
 |---|---|
 | `time_now` | Returns the current date, time, weekday and timezone. |
 | `web_search` | Searches the web through Brave. Needs `web.brave.apiKey`. |
-| `web_fetch` | Fetches a web page as Markdown. Addresses inside your own network are refused unless listed in `web.fetchAllowPrivate`. |
+| `web_fetch` | Fetches a web page as Markdown, or as plain text with `extract: text`. `maxChars` caps the answer (default 5000, at most 50000); pages over 750 KB are refused. Addresses inside your own network are refused unless listed in `web.fetchAllowPrivate`. |
 
 ### Files
 

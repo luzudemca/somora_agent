@@ -456,6 +456,7 @@ wiki:
 | `wiki.deep.mergeShrinkGuard.minRatio` | The merge is refused when the new text is smaller than this share of the old one. |
 | `wiki.deep.mergeShrinkGuard.minExistingBytes` | Pages smaller than this are never guarded. |
 | `wiki.deep.skipCacheDays` | An unchanged note that was skipped is looked at again after this many days. `0` means only when it changes. |
+| `wiki.deep.callTimeoutMs` | Time limit of one model call (one note), in milliseconds. Past it the note goes to the next backup. Default 300000. |
 | `wiki.deep.maxPageChars` | A page over this size takes no more merges. The note becomes a sub-page. |
 | `wiki.lucid.enabled` | Switches the scheduled Lucid run on. |
 | `wiki.lucid.intervalDays` | Days between Lucid runs. |

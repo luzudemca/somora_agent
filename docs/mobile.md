@@ -9,6 +9,9 @@ talking to your agents.
 - **Chat with every agent**, in any of its sessions, with live answers.
 - **Sessions and model in the header.** Switch or start a session and
   pick the model with one tap.
+- **Steer or queue.** While an agent works, send a note into the
+  running turn or queue the next message behind it.
+- **Thinking level per session**, in the same sheet as the model.
 - **Voice in and out.** Dictate a message, have the answer read aloud.
 - **Photos and PDFs** from the camera, the photo library or files.
 - **Dots that show what happens elsewhere**: which agents are working,
@@ -49,6 +52,10 @@ The first time, the app asks for the server's key. On the server, run
 link signs the app in. Or paste what `somora key` prints. The phone
 remembers it for a year.
 
+The QR code only helps when the phone can reach the server: with HTTPS
+via Tailscale, or with `server.host: 0.0.0.0` on the same network.
+Otherwise the link points at `127.0.0.1`, which the phone cannot open.
+
 ## The screen
 
 | Part | What it does |
@@ -85,10 +92,13 @@ moment is tagged `unreachable`.
 
 **Thinking.** Above the models: the thinking level for this session,
 with where it comes from (`set for this session`, `agent's default`,
-`model's default`, or `nothing set — the model decides`). Tap **off**,
-**low**, **med** or **high** to set it for this session. **auto**
-removes the session's own level, so the agent's or the model's default
-applies again. With a model that cannot think the level has no effect,
+`model's default`, or `nothing set — the model decides`). The buttons
+read **auto**, **off**, **low**, **med** and **high**. Tap **off**
+to **high** to set it for this session. **auto** removes the session's
+own level, so the agent's or the model's default applies again; the
+line `in effect: <level>` then shows which one.
+
+With a model that cannot think the level has no effect,
 and the sheet says so. The [thinking guide](thinking.md) explains the
 order.
 
@@ -178,6 +188,7 @@ is open. It is off by default and remembered per browser.
 | `⇄ fallback · <model>` | A backup model answered. The tooltip names the models that failed and why. |
 | **⚠** block | The turn ended in an error. |
 | Media line | The reply produced a picture or video. The phone shows a line naming it. Open the web client to see it. |
+| `Image from <host>` with **Show** and **Always show** | A picture from another website, held back until you allow it. See [Security](security.md#pictures-from-other-websites). |
 
 The thinking row only exists when the server captures reasoning.
 `thinkingContent.capture: false` in `config.yaml` hides it everywhere.
@@ -264,7 +275,8 @@ The app needs the server's key once and keeps it as a cookie. It also
 works only while the phone is on the same Tailscale network as the
 server. Your model logins stay on the server. The phone only talks to
 the somora API. After `somora key rotate` the app asks for the key
-again.
+again. The app has no sign-out button: to sign the phone out, clear
+the site's data in the browser settings.
 
 ## Troubleshooting
 

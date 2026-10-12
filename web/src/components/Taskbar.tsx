@@ -1,10 +1,8 @@
 import { useBrowsers } from './BrowserProvider';
-// Bottom taskbar. Layout: somora-logo + window-list (one button per
-// open window, color-tinted per agent) + tools (auto-arrange / save /
-// restore) + live host CPU/mem from `/host-stats` + clock.
-//
-// No logout button: somora is LAN-only, no auth, no session to
-// terminate.
+// Bottom taskbar. Layout: somora logo and version, inbox, gear (reload
+// config, restart, sign out), screen menu (arrange, save and restore the
+// layout, full screen, theme) + window list (one button per open window,
+// tinted per agent) + live host CPU/mem from `/host-stats` + clock.
 
 import { useEffect, useRef, useState } from 'react';
 import { Grid3x3, LogOut, Maximize, Minimize, Monitor, Pin, Power, RefreshCw, Settings, Sparkles } from 'lucide-react';
@@ -283,7 +281,7 @@ export function Taskbar({
           <button
             className="taskbar-tool"
             type="button"
-            title={configStatus?.invalid ? 'config.yaml does not validate — the last valid version is running' : 'Server: reload config, restart'}
+            title={configStatus?.invalid ? 'config.yaml does not validate — the last valid version is running' : 'Server: reload config, restart, sign out'}
             aria-haspopup="menu"
             aria-expanded={gearOpen}
             onClick={() => setGearOpen((v) => !v)}
@@ -355,7 +353,7 @@ export function Taskbar({
           <button
             className="taskbar-tool"
             type="button"
-            title="Screen: arrange, save and restore the layout, full screen"
+            title="Screen: arrange, save and restore the layout, full screen, theme"
             aria-haspopup="menu"
             aria-expanded={screenOpen}
             onClick={() => setScreenOpen((v) => !v)}

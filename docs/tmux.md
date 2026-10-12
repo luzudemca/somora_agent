@@ -304,6 +304,7 @@ somora removes its own internal variables before your shell starts:
 | Claude isolation | `CLAUDE_CONFIG_DIR`, `SOMORA_CLAUDE_BIN` |
 | Engine overrides | `SOMORA_CODEX_BIN`, `SOMORA_GROK_BIN`, `SOMORA_BIN_PATH`, `SOMORA_CODEX_SHELL_ENV_POLICY` |
 | Runtime | `TSX_TSCONFIG_PATH`, `NODE_ENV` |
+| Login key | `SOMORA_KEY` |
 | Claude Code markers | `CLAUDECODE`, `CLAUDE_PROJECT_DIR`, `CLAUDE_CODE_ENTRYPOINT`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_MESSAGING_*` |
 
 The effect: a `claude` or `codex` started in the pane uses your normal
@@ -315,7 +316,7 @@ address variables stay, so skill scripts can still call somora. The key
 does not: a script sends `-H "Authorization: Bearer $(somora key)"`.
 
 `inherit_agent_env: true` on `create` passes the internal variables
-through. It is rarely needed:
+through, the key included. It is rarely needed:
 
 - A nested `claude` should share the isolated state of somora's own
   Claude engine.

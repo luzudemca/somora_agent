@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/thenaxon/somora_agent/security/advisories/new
+    about: Report security problems privately, not as an issue.
+  - name: Questions and help
+    url: https://somora.ai/discord
+    about: Ask on Discord.
+  - name: Documentation
+    url: https://docs.somora.ai
+    about: Setup, configuration and every feature.

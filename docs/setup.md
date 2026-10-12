@@ -124,7 +124,8 @@ brew install tmux ripgrep git                               # macOS
 Then install and start:
 
 ```bash
-ONNXRUNTIME_NODE_INSTALL=skip npm install -g somora
+ONNXRUNTIME_NODE_INSTALL=skip npm install -g somora \
+  --allow-scripts=cpu-features,esbuild,fsevents,node-pty,onnxruntime-node,protobufjs,somora,ssh2
 somora init            # data folder and service definition
 somora server start    # start the service and enable it at boot
 somora setup           # models, first agent, memory, HTTPS
@@ -135,6 +136,12 @@ somora key link        # sign a browser in: link, and a QR code for the phone
 `ONNXRUNTIME_NODE_INSTALL=skip` leaves out a 300 MB CUDA library that
 somora never uses. Embeddings run on the CPU. The installer and
 `somora update` set it for you.
+
+`--allow-scripts` names the packages that may run an install script:
+the ones that build or fetch a native part, and somora's own check of
+Node.js and glibc. npm 12 skips every script not named there. npm older
+than 11.16 does not know the option; there, leave that line out.
+`npm config get allow-scripts` prints `undefined` on such an npm.
 
 If npm answers `EACCES`, its global folder belongs to root. Give npm a
 folder of your own instead of reaching for `sudo`:
@@ -339,7 +346,9 @@ somora update 2026.930.1     # one specific version
 2. Checks that your Node.js and, on Linux, your glibc are new enough
    for that version, before anything is installed. When glibc is too
    old, it names the last version that runs on your system.
-3. Installs it with `npm install -g somora@<version>`.
+3. Installs it with `npm install -g somora@<version>`, with
+   `ONNXRUNTIME_NODE_INSTALL=skip` and, when npm knows the option,
+   the same `--allow-scripts` list as above.
 4. Runs `somora init` from the new install, so the service points at
    it. The first time an installation gets its key, this step prints a
    box: browsers and phones sign in once with `somora key link`.
@@ -576,6 +585,8 @@ server:
   host: 127.0.0.1
   port: 18737
   resumeAfterRestart: requested
+  auth: on
+  allowedHosts: []
   # tls:
   #   cert: ~/.somora/certs/<your-host>.<your-tailnet>.ts.net.crt
   #   key: ~/.somora/certs/<your-host>.<your-tailnet>.ts.net.key
@@ -634,6 +645,8 @@ codexCli:
 | `server.host` | `127.0.0.1` | Address the server listens on. `0.0.0.0` accepts other devices. Set it here, not as `SOMORA_HOST` in the service. |
 | `server.port` | `18737` | Port. |
 | `server.resumeAfterRestart` | `requested` | Who is woken after a restart: `requested`, `all` or `off`. |
+| `server.auth` | `on` | `on`: every request needs the key. `off`: no key. See [Security](security.md#the-key). |
+| `server.allowedHosts` | `[]` | More names a browser may use to reach somora. See [Security](security.md#websites-in-your-browser). |
 | `server.tls.cert` | none | Certificate file in PEM format. With `key` it switches the server to HTTPS and HTTP/2. `~` is your home folder. |
 | `server.tls.key` | none | Private key file in PEM format. |
 | `server.tls.publicHost` | none | Host name clients use. Must match the certificate. |
@@ -707,6 +720,7 @@ not watched: they run outside the chat.
 | `tui` | [TUI display](display.md) |
 | `mobile` | [Mobile app](mobile.md) |
 | `web.brave`, `vision` | [Tools](tools.md) |
+| `web.fetchAllowPrivate` | [Security](security.md) |
 | `workspace`, `attachments` | [Files](files.md) |
 | `stt`, `tts` | [Voice](voice.md) |
 | `realtimeVoice` | [Realtime voice](realtime-voice.md) |
@@ -734,7 +748,7 @@ in the agents guide.
 | `somora server restart` | Restarts the service. |
 | `somora server status` | Shows the running server, a waiting update and the service state. |
 | `somora tui` | Opens the terminal client against the running server. |
-| `somora key` | Prints the server's key. Every request needs it unless `server.auth: off`. |
+| `somora key [show]` | Prints the server's key. Run it on the server. Every request needs it unless `server.auth: off`. |
 | `somora key link [--no-open]` | Prints a link that signs a browser in and a QR code for the phone, and opens the browser when the machine has a screen. |
 | `somora key rotate` | Makes a new key. Browsers sign in again, scripts need the new key. |
 | `somora update [<version>] [--edge] [--force] [--no-reinit]` | Installs a version from npm, refreshes the service and restarts it. |
@@ -774,6 +788,8 @@ Everything somora keeps lives under `~/.somora/`, or under
 | Path | What it is |
 |---|---|
 | `config.yaml` | The server config. |
+| `server.key` | The login key. Owner-only (`chmod 600`). `somora key rotate` replaces it. |
+| `inbox.json` | The web client's inbox: what is open, read or muted. |
 | `somora.env` | Secrets for skills and tools, one `KEY=value` per line. Loaded into the server's environment at start. A variable that is already set wins. Keep it at `chmod 600`. |
 | `team.yaml` | The team chart. |
 | `agents/<name>/` | One folder per agent: `AGENTS.md`, `SOUL.md`, `USER.md`, `agent.yaml`, its memory and its sessions. |
@@ -820,7 +836,7 @@ service's environment.
 | `SOMORA_HOME` | `~/.somora` | The data folder. |
 | `SOMORA_PORT` | `server.port` | Overrides the port. |
 | `SOMORA_HOST` | `server.host` | Overrides the listen address. Prefer the config. With HTTPS on, the server sets it to `server.tls.publicHost` for its own child processes. |
-| `SOMORA_KEY` | `~/.somora/server.key` | The key a client sends. Set it for the terminal client on another machine. The server sets it for its own child processes and keeps it out of agents' shells. |
+| `SOMORA_KEY` | `~/.somora/server.key` | The key a client sends. Only useful for the terminal client on another machine. On the server it has no effect: the server always reads the key file, sets it for its own child processes and keeps it out of agents' shells. |
 | `SOMORA_TLS` | unset | Set to `1` by the server when it serves HTTPS, for its child processes. Do not set it yourself. |
 | `SOMORA_LOG_LEVEL` | `info` | Log level. |
 | `SOMORA_ENV_FILE` | `~/.somora/somora.env` | Another env file to load at start. |
@@ -869,7 +885,9 @@ installs anything.
 installed".** The new version needs a newer Linux (glibc) or Node.js
 than this machine has. npm stops before it replaces anything, so the
 version you had keeps running. The message names what is missing and,
-for glibc, the last version that runs here.
+for glibc, the last version that runs here. The check is somora's own
+install script: the installer and `somora update` always run it, a
+plain npm 12 install only with `--allow-scripts` as shown above.
 
 **`npm install -g` fails with `EACCES`.** npm's global folder belongs
 to root. Run the installer again, or move the folder as shown under

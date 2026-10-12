@@ -41,7 +41,7 @@ server:
   # a DNS name of your own you open somora under. Programs that are not
   # browsers are never checked.
   # allowedHosts: [somora.home.lan]
-  # The login key (~/.somora/server.key, made on first start; `somora key`
+  # The login key (~/.somora/server.key, made by `somora init` or the first start; `somora key`
   # prints it). on: every request needs it — programs send
   # "Authorization: Bearer <key>", a browser signs in once
   # (`somora key link`). off: no key, the network alone decides.

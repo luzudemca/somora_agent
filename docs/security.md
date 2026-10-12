@@ -93,8 +93,10 @@ Commands:
 | `somora key link` | Prints a link that signs a browser in and a QR code for the phone. Opens the browser when the machine has a screen; `--no-open` does not. |
 | `somora key rotate` | Makes a new key. The running server switches within seconds. Every browser signs in again, and scripts need the new key. |
 
-The key never sits in an agent's shell environment, so `env` does not
-show it. A script an agent writes reads it with `somora key`.
+The key is kept out of an agent's shell environment, so `env` does not
+show it. A script an agent writes reads it with `somora key`. The
+exception is a command or tmux session started with
+`inherit_agent_env: true`, which passes it through.
 
 Ten wrong keys from one address within five minutes block that address
 for a minute. The server's own machine is never blocked.
@@ -114,30 +116,43 @@ send an agent a task, or read answers through a name of its own that
 later points at your machine (DNS rebinding).
 
 So the server turns such requests away with `403`. A request from a
-browser passes when it was sent to one of this machine's names, and
-when the page that sent it is on one of them too. A link from another
-website still opens somora. Programs that are not browsers send no such
-marks and are never checked: the terminal client, the mobile app's
-requests, `curl`, scripts and the agents' own tools.
+browser passes when two things hold:
 
-This machine's names are any IP address, `localhost`, the host name and
-`<host>.local`, every `*.ts.net` name, `server.tls.publicHost`, and what
-you list under `server.allowedHosts`. Reach somora in the browser under
-a DNS name of your own, for example `somora.home.lan`? Add it there.
+- It was sent to one of this machine's names: any IP address,
+  `localhost`, the host name and `<host>.local`, every `*.ts.net` name,
+  `server.tls.publicHost`, and what you list under
+  `server.allowedHosts`.
+- The page that sent it is somora itself: the same address, an address
+  of this machine, `localhost`, the host name, `publicHost` or an
+  `allowedHosts` entry. A page on another computer in your network or
+  tailnet does not count.
+
+The web client and the mobile app pass, because somora serves them
+itself. A link from another website still opens somora. Programs that
+are not browsers send no such marks and are never checked: the
+terminal client, `curl`, scripts and the agents' own tools.
+
+Reach somora in the browser under a DNS name of your own, for example
+`somora.home.lan`? Add it to `server.allowedHosts`.
 
 ### HTTPS
 
 With `server.tls` set, the server speaks HTTPS (HTTP/2, with HTTP/1.1 as
 a fallback). Without it, it speaks plain HTTP. TLS encrypts the
-connection. It does not add a login.
+connection. It does not add a login. Over plain HTTP the key and the
+sign-in cookie travel unencrypted, so on a network you do not trust,
+use HTTPS.
 
 ### The server log
 
 `GET /logs` serves the tail of somora's own log so the web client can
 show it. The log holds event names, tool names, file paths, shell
 commands, agent and session names. The route takes a day, never a path,
-so it cannot read other files. Treat the log as readable by everyone
-who can reach the port. On disk, `~/.somora/logs/` is readable by your
+so it cannot read other files.
+
+Treat the log as readable by everyone
+who has the key, or with `server.auth: off`, by everyone who can reach
+the port. On disk, `~/.somora/logs/` is readable by your
 user only; somora tightens an older folder at the next start.
 
 ## What an agent can do on the host
@@ -207,7 +222,8 @@ name that changes its answer is refused too.
 
 Redirects are followed one hop at a time, each checked before anything
 is sent to it, at most five. To let agents read an internal page, list its host, IP or IPv4 range in
-`web.fetchAllowPrivate`.
+`web.fetchAllowPrivate`. A `*.example.lan` entry covers every name
+under that domain.
 
 The browser tools are off by default (`browser.enabled`). When on, they
 block private networks unless a host or range is listed in
@@ -472,7 +488,7 @@ web:
 | `agentLoop.toolCallTimeoutMs` | `30000` | Time limit of a fast tool call. |
 | `browser.enabled` | `false` | The browser tools. |
 | `browser.allowPrivate` | `[]` | Private hosts or ranges the browser may open. |
-| `web.fetchAllowPrivate` | `[]` | Private hosts, IPs or IPv4 ranges `web_fetch` may read. |
+| `web.fetchAllowPrivate` | `[]` | Private hosts, IPs or IPv4 ranges `web_fetch` may read. `*.example.lan` covers every name under that domain. |
 | `resources.<name>.allowBlocked` | `[]` | Blocked shell commands this SSH resource may run anyway. |
 | `sendUserTag` (per provider) | `true` | Send the `user` string to an OpenAI compatible provider. |
 
@@ -537,7 +553,9 @@ matched. On an SSH resource you can allow it with `allowBlocked`.
 
 ## Reporting issues
 
-Open a GitHub issue with the `security` label. Do not include secrets
+Report a security problem privately, not as a public issue: open the
+**Security** tab of the GitHub repository and choose **Report a
+vulnerability**. Only the maintainers see it. Do not include secrets
 in the report.
 
 ## See also

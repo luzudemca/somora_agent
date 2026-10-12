@@ -4486,7 +4486,7 @@ app.get('/media/:id', async (c) => {
 
 /** The bytes. `?download=1` forces a save dialog for any type. */
 app.get('/media/:id/file', async (c) => serveMediaFile(c, 'file'));
-/** A video's still. 404 when the provider served none. */
+/** A video's still, cut on first request when the provider served none. 404 when that fails. */
 app.get('/media/:id/thumb', async (c) => serveMediaFile(c, 'thumb'));
 
 async function serveMediaFile(c: Context, which: 'file' | 'thumb'): Promise<Response> {

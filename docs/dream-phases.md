@@ -426,7 +426,8 @@ wiki:
   the same note. That model is slow on this input, not down, so it is
   not marked and chat keeps using it. For Deep the limit is
   `wiki.deep.callTimeoutMs` (default 5 minutes); a worker that thinks
-  over a long page can need that long.
+  over a long page can need that long. Lucid's limits are fixed: 10
+  minutes per batch.
 - A backup name that is not a configured model stops the server at
   start, with the list of known models.
 
@@ -636,7 +637,7 @@ fallback:
 | `wiki.deep.mergeShrinkGuard.minExistingBytes` | 2000 | Pages below this size are not guarded. |
 | `wiki.deep.skipCacheDays` | 30 | A skipped, unchanged note is looked at again after this many days. `0` means never. |
 | `wiki.deep.maxPageChars` | 50000 | A page above this takes no more content and gets sub-pages. |
-| `wiki.deep.callTimeoutMs` | 300000 | Time limit of one model call (one note), in milliseconds. Past it the note goes to the next backup. |
+| `wiki.deep.callTimeoutMs` | 300000 | Time limit of one model call (one note), in milliseconds, 30000 to 1800000. Past it the note goes to the next backup. |
 | `wiki.lucid.enabled` | true | Scheduled Lucid runs. |
 | `wiki.lucid.intervalDays` | 7 | Days between Lucid runs. |
 | `wiki.lucid.model` | none | The Lucid worker. Required. |

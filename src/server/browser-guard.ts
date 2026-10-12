@@ -1,6 +1,7 @@
 // Requests a browser makes on behalf of another website.
 //
-// somora has no login: whoever reaches the port may use it. A browser
+// With `server.auth: off` whoever reaches the port may use it, and even
+// with the key a signed-in browser carries its cookie. A browser
 // is a bridge to that port for every website the user opens — a page
 // can open `ws://127.0.0.1:18737/terminal/attach` or POST to
 // `/chat/send`, and with DNS rebinding (a name of the attacker's that

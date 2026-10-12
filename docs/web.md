@@ -206,8 +206,10 @@ the agent has.
 ### Inbox
 
 The tray icon left of the gear is the inbox. A number on it counts
-what is new: red when something needs you, green otherwise. Opening
-the inbox marks everything in it as read.
+what is new, up to `9+`: red when something needs you, such as a
+login, the config or the certificate, green otherwise. The inbox
+refreshes every minute and when the window gets focus. Opening it
+marks everything in it as read.
 
 | What arrives | When it goes |
 |---|---|
@@ -290,6 +292,7 @@ session too.
 | Centered divider | A message from somora itself, not from a person. See the table below. |
 | Red **Turn failed** block | The turn ended in an error. Media it produced before failing hangs under it. |
 | Pictures and videos under a reply | Media the turn generated. |
+| `Image from <host>` with **Show** and **Always show** | A picture from another website, held back until you allow it. See [Security](security.md#pictures-from-other-websites). |
 | Thumbnails on your message | Your attachments. |
 
 A notice appears once when a backup model takes over and once when the
@@ -599,6 +602,8 @@ the server.
 | `somora.web.showTools.<agent>::<session>` | The **tools** toggle. The same pattern with `showMemory` and `showThinking`. |
 | `somora.voice.autoPlay.<agent>::<session>` | The **voice** toggle. |
 | `somora.web.builderPanel.collapsed.<agent>` | Whether the builder panel is folded. |
+| `somora.web.theme` | The theme: Dark, Light or Auto. |
+| `somora.chat.externalImages` | **Always show** for pictures from other websites. Shared with the mobile app. |
 
 ## Routes the client uses
 
@@ -623,7 +628,8 @@ controls on this page:
 | `GET /stt/config`, `POST /stt/transcribe` | Microphone |
 | `GET /tts/config` | Voice toggle |
 | `GET /config/status`, `POST /config/reload`, `POST /server/restart` | Gear menu |
-| `GET /version` | Version and update notice |
+| `GET /version` | Version under the logo |
+| `GET /inbox`, `POST /inbox/read`, `POST /inbox/mute`, `POST /inbox/unmute` | Inbox |
 | `GET /host-stats` | `cpu` and `mem` |
 | `GET /logs`, `GET /logs/since` | Log window |
 | `GET /health` | Waiting for the server after a restart |
