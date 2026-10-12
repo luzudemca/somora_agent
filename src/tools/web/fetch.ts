@@ -20,7 +20,10 @@
 
 import { Readability } from '@mozilla/readability';
 import { JSDOM, VirtualConsole } from 'jsdom';
+import { lookup as dnsLookup, type LookupAddress, type LookupOptions } from 'node:dns';
 import { isIP } from 'node:net';
+import { Agent, fetch as undiciFetch } from 'undici';
+import { isPrivateAddress, matchesEntry } from '../../browser/policy.ts';
 import TurndownService from 'turndown';
 import { z } from 'zod';
 import { logger } from '../../server/logger.ts';
@@ -64,62 +67,81 @@ const BLOCKED_HOSTNAMES = new Set([
 ]);
 
 // IPv4 ranges to block (CIDR-style: /first-octet/second-octet predicate).
-function isPrivateIPv4(ip: string): boolean {
-  const parts = ip.split('.').map((p) => parseInt(p, 10));
-  if (parts.length !== 4 || parts.some((p) => Number.isNaN(p) || p < 0 || p > 255)) return false;
-  const [a = 0, b = 0] = parts;
-  // RFC1918
-  if (a === 10) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  if (a === 192 && b === 168) return true;
-  // Loopback
-  if (a === 127) return true;
-  // Link-local
-  if (a === 169 && b === 254) return true;
-  // Carrier-grade NAT / shared address space
-  if (a === 100 && b >= 64 && b <= 127) return true;
-  // Multicast / reserved
-  if (a >= 224) return true;
-  // 0.x.x.x
-  if (a === 0) return true;
-  return false;
-}
+const MAX_REDIRECTS = 5;
 
-function isPrivateIPv6(ip: string): boolean {
-  const lower = ip.toLowerCase();
-  // Loopback ::1
-  if (lower === '::1' || lower === '::') return true;
-  // Link-local fe80::/10
-  if (lower.startsWith('fe80:') || lower.startsWith('fe9') || lower.startsWith('fea') || lower.startsWith('feb')) return true;
-  // Unique-local fc00::/7
-  if (lower.startsWith('fc') || lower.startsWith('fd')) return true;
-  // IPv4-mapped (::ffff:10.0.0.1 etc.)
-  const v4match = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-  if (v4match) return isPrivateIPv4(v4match[1]!);
-  return false;
-}
+/** Tests only: `host:port` pairs the check lets through, so a local
+ *  stand-in server can play the public site that redirects inward. */
+export const fetchTestAllow = new Set<string>();
 
-function ssrfCheck(targetUrl: URL): void {
+/** Before a request (and before every redirect hop): http(s) only, no
+ *  internal names, no private address written into the URL. Names are
+ *  checked again at connect time, on the addresses they resolve to. */
+function ssrfCheck(targetUrl: URL, allowPrivate: readonly string[]): void {
   const proto = targetUrl.protocol.toLowerCase();
   if (proto !== 'http:' && proto !== 'https:') {
     throw new Error(`web_fetch: only http/https allowed, got '${proto}'`);
   }
-  const host = targetUrl.hostname.toLowerCase();
-  if (BLOCKED_HOSTNAMES.has(host)) {
+  // `hostname` keeps the brackets of an IPv6 literal.
+  const host = targetUrl.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  if (BLOCKED_HOSTNAMES.has(host) || host.endsWith('.localhost')) {
     throw new Error(`web_fetch: hostname '${host}' is blocked (internal/private)`);
   }
-  // IPv6 literal arrives wrapped in brackets in href but `hostname` strips
-  // them. Detect via isIP.
-  const ipKind = isIP(host);
-  if (ipKind === 4 && isPrivateIPv4(host)) {
-    throw new Error(`web_fetch: IP '${host}' is in a private/reserved range`);
-  }
-  if (ipKind === 6 && isPrivateIPv6(host)) {
-    throw new Error(`web_fetch: IPv6 '${host}' is in a private/reserved range`);
+  if (fetchTestAllow.has(`${host}:${targetUrl.port}`)) return;
+  if (isIP(host) && isPrivateAddress(host) && !allowPrivate.some((e) => matchesEntry(e, host, host))) {
+    throw new Error(`web_fetch: address '${host}' is in a private/reserved range — add it to web.fetchAllowPrivate in config.yaml if agents may read it`);
   }
 }
 
-async function fetchWithSizeCap(url: string): Promise<{
+/** DNS lookup for the fetch's own connections: a name that resolves to
+ *  a private address is refused at the moment of connecting, so a name
+ *  that changes its answer between check and request (DNS rebinding)
+ *  cannot slip through. */
+export function guardedLookup(allowPrivate: readonly string[] = []) {
+  return (
+    hostname: string,
+    options: LookupOptions,
+    callback: (err: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void,
+  ): void => {
+    dnsLookup(hostname, { ...options, all: true }, (err, addresses) => {
+      if (err) return callback(err, '');
+      const list = addresses as LookupAddress[];
+      const bad = list.find((a) => isPrivateAddress(a.address) && !allowPrivate.some((e) => matchesEntry(e, hostname, a.address)));
+      if (bad) {
+        const e = new Error(
+          `web_fetch: '${hostname}' resolves to a private address (${bad.address}) — add it to web.fetchAllowPrivate in config.yaml if agents may read it`,
+        ) as NodeJS.ErrnoException;
+        e.code = 'EPRIVATEADDR';
+        return callback(e, '');
+      }
+      if (options.all) return callback(null, list);
+      callback(null, list[0]!.address, list[0]!.family);
+    });
+  };
+}
+
+const guardedAgents = new Map<string, Agent>();
+function getGuardedAgent(allowPrivate: readonly string[]): Agent {
+  const key = allowPrivate.join('\n');
+  let agent = guardedAgents.get(key);
+  if (!agent) {
+    agent = new Agent({ connect: { lookup: guardedLookup([...allowPrivate]) as never } });
+    guardedAgents.set(key, agent);
+  }
+  return agent;
+}
+
+/** Why a fetch failed, with the private-address refusal spelled out. */
+function fetchFailure(err: unknown): Error {
+  let cause: unknown = err;
+  while (cause && typeof cause === 'object') {
+    const c = cause as { code?: string; message?: string; cause?: unknown };
+    if (c.code === 'EPRIVATEADDR' && c.message) return new Error(c.message);
+    cause = c.cause;
+  }
+  return err instanceof Error ? err : new Error(String(err));
+}
+
+async function fetchWithSizeCap(url: string, allowPrivate: readonly string[]): Promise<{
   status: number;
   finalUrl: string;
   contentType: string | null;
@@ -128,15 +150,35 @@ async function fetchWithSizeCap(url: string): Promise<{
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      redirect: 'follow',
-      headers: {
-        // Polite UA + Accept signaling we want text.
-        'User-Agent': 'somora-agent/0.0.1 (https://github.com/thenaxon/somora_agent)',
-        Accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8',
-      },
-    });
+    // Redirects are followed by hand so every hop is checked before
+    // anything is sent to it.
+    let current = new URL(url);
+    let res: Awaited<ReturnType<typeof undiciFetch>>;
+    for (let hop = 0; ; hop++) {
+      ssrfCheck(current, allowPrivate);
+      try {
+        res = await undiciFetch(current.href, {
+          signal: controller.signal,
+          redirect: 'manual',
+          dispatcher: getGuardedAgent(allowPrivate),
+          headers: {
+            // Polite UA + Accept signaling we want text.
+            'User-Agent': 'somora-agent/0.0.1 (https://github.com/thenaxon/somora_agent)',
+            Accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8',
+          },
+        });
+      } catch (err) {
+        throw fetchFailure(err);
+      }
+      const location = res.headers.get('location');
+      if (res.status >= 300 && res.status < 400 && location) {
+        await res.body?.cancel().catch(() => {});
+        if (hop >= MAX_REDIRECTS) throw new Error(`web_fetch: more than ${MAX_REDIRECTS} redirects`);
+        current = new URL(location, current);
+        continue;
+      }
+      break;
+    }
     if (!res.body) {
       throw new Error(`web_fetch: ${res.status} but no response body`);
     }
@@ -166,7 +208,7 @@ async function fetchWithSizeCap(url: string): Promise<{
     const body = chunks.map((c) => decoder.decode(c, { stream: true })).join('') + decoder.decode();
     return {
       status: res.status,
-      finalUrl: res.url,
+      finalUrl: current.href,
       contentType,
       body,
     };
@@ -268,21 +310,14 @@ export const webFetch: ToolDefinition<z.infer<typeof FetchInput>, FetchOutput> =
     } catch {
       throw new Error(`web_fetch: invalid URL '${input.url}'`);
     }
-    ssrfCheck(parsed);
+    const allowPrivate = ctx.config?.web?.fetchAllowPrivate ?? [];
+    ssrfCheck(parsed, allowPrivate);
 
     const start = Date.now();
-    const { status, finalUrl, contentType, body } = await fetchWithSizeCap(input.url);
+    const { status, finalUrl, contentType, body } = await fetchWithSizeCap(input.url, allowPrivate);
 
     if (status >= 400) {
       throw new Error(`web_fetch: ${status} from ${finalUrl}`);
-    }
-
-    // After redirect, recheck SSRF — server might 302 us to a private IP.
-    try {
-      const redirectedUrl = new URL(finalUrl);
-      ssrfCheck(redirectedUrl);
-    } catch (err) {
-      throw new Error(`web_fetch: post-redirect SSRF check failed: ${(err as Error).message}`);
     }
 
     const isHtml =

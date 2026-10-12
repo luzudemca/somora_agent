@@ -23,26 +23,72 @@ export interface PolicyVerdict {
 
 const ALLOWED_SCHEMES = new Set(['http:', 'https:']);
 
-/** RFC1918, loopback, link-local, CGNAT, IPv6 ULA/link-local/loopback. */
+/** Addresses that are not the public internet: loopback, RFC1918,
+ *  link-local (cloud metadata), CGNAT/Tailscale, benchmark, multicast
+ *  and reserved ranges, IPv6 loopback/ULA/link-local/multicast, and
+ *  IPv6 forms that carry an IPv4 address (mapped `::ffff:7f00:1`,
+ *  compatible, NAT64 `64:ff9b::`, 6to4 `2002::`) — judged by that
+ *  IPv4 address. Shared by web_fetch and the browser policy. */
 export function isPrivateAddress(ip: string): boolean {
-  if (isIP(ip) === 4) {
-    const [a, b] = ip.split('.').map(Number) as [number, number];
-    if (a === 10 || a === 127 || a === 0) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 169 && b === 254) return true;
-    if (a === 100 && b >= 64 && b <= 127) return true;
-    return false;
-  }
-  if (isIP(ip) === 6) {
-    const lower = ip.toLowerCase();
-    if (lower === '::1' || lower === '::') return true;
-    if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // ULA
-    if (lower.startsWith('fe80')) return true; // link-local
-    if (lower.startsWith('::ffff:')) return isPrivateAddress(lower.slice(7)); // v4-mapped
+  const bare = ip.replace(/^\[|\]$/g, '');
+  if (isIP(bare) === 4) return isPrivateV4(bare.split('.').map(Number));
+  if (isIP(bare) === 6) {
+    const w = ipv6Words(bare);
+    if (!w) return true;
+    const v4 = (hi: number, lo: number) => [hi >> 8, hi & 0xff, lo >> 8, lo & 0xff];
+    const zeros = (n: number) => w.slice(0, n).every((x) => x === 0);
+    if (zeros(8)) return true; // ::
+    if (zeros(7) && w[7] === 1) return true; // ::1
+    if (zeros(5) && (w[5] === 0xffff || w[5] === 0)) return isPrivateV4(v4(w[6]!, w[7]!)); // mapped / compatible
+    if (w[0] === 0x64 && w[1] === 0xff9b) return isPrivateV4(v4(w[6]!, w[7]!)); // NAT64
+    if (w[0] === 0x2002) return isPrivateV4(v4(w[1]!, w[2]!)); // 6to4
+    if ((w[0]! & 0xfe00) === 0xfc00) return true; // ULA fc00::/7
+    if ((w[0]! & 0xffc0) === 0xfe80 || (w[0]! & 0xffc0) === 0xfec0) return true; // link-/site-local
+    if ((w[0]! & 0xff00) === 0xff00) return true; // multicast
+    if (w[0] === 0x2001 && w[1] === 0xdb8) return true; // documentation
+    if (w[0] === 0x100 && zeros(4)) return true; // discard 100::/64
     return false;
   }
   return false;
+}
+
+function isPrivateV4(o: number[]): boolean {
+  const [a = 0, b = 0, c = 0] = o;
+  if (a === 0 || a === 10 || a === 127) return true;
+  if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT, Tailscale
+  if (a === 169 && b === 254) return true; // link-local, cloud metadata
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 192 && b === 0 && c === 0) return true;
+  if (a === 198 && (b === 18 || b === 19)) return true; // benchmark
+  if (a >= 224) return true; // multicast, reserved, broadcast
+  return false;
+}
+
+/** Eight 16-bit words of an IPv6 address, or null. */
+function ipv6Words(ip: string): number[] | null {
+  let s = ip.toLowerCase();
+  const zone = s.indexOf('%');
+  if (zone >= 0) s = s.slice(0, zone);
+  const tail: number[] = [];
+  const dotted = /(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(s);
+  if (dotted) {
+    const o = dotted.slice(1, 5).map(Number);
+    if (o.some((x) => x > 255)) return null;
+    tail.push((o[0]! << 8) | o[1]!, (o[2]! << 8) | o[3]!);
+    s = s.slice(0, s.length - dotted[0].length);
+    if (!s.endsWith('::')) s = s.replace(/:$/, '');
+  }
+  const halves = s.split('::');
+  if (halves.length > 2) return null;
+  const part = (x: string) => (x ? x.split(':').map((h) => parseInt(h, 16)) : []);
+  const head = part(halves[0]!);
+  const rest = halves.length === 2 ? part(halves[1]!) : [];
+  const fill = 8 - tail.length - head.length - rest.length;
+  if (halves.length === 1 && fill !== 0) return null;
+  if (fill < 0) return null;
+  const words = [...head, ...Array(halves.length === 2 ? fill : 0).fill(0), ...rest, ...tail];
+  return words.length === 8 && words.every((x) => Number.isInteger(x) && x >= 0 && x <= 0xffff) ? words : null;
 }
 
 function ipToInt(ip: string): number {
