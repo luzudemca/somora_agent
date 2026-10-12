@@ -44,20 +44,23 @@ models, your first agent, memory and HTTPS — details under
 
 ## See it
 
-![somora web screenshot — browser desktop with multi-window chat, agent dock, and tmux app](docs/images/somora-web-2026-05-23.png)
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/somora-web-light-2026-10-12.png" />
+  <img src="docs/images/somora-web-dark-2026-10-12.png" alt="somora web client: browser desktop with agent windows, two tmux terminals, the agent's browser, a builder plan and the taskbar" />
+</picture>
 
 <table>
   <tr>
     <td width="66%" valign="top">
-      <img src="docs/images/somora-tui-2026-05-23.png" alt="somora TUI screenshot — terminal multi-agent chat with memory injection and tool calls" />
+      <img src="docs/images/somora-tui-2026-10-12.png" alt="somora TUI: the terminal client with its status line" />
     </td>
     <td width="34%" valign="top">
-      <img src="docs/images/somora-mobile-2026-05-23.png" alt="somora mobile PWA screenshot — avatar row at the top, A2A reply from one agent quoting two others, paperclip + camera + mic + send input bar at the bottom" />
+      <img src="docs/images/somora-mobile-2026-10-12.png" alt="somora mobile app: avatar row at the top, an agent's reply, attachment, microphone and send at the bottom" />
     </td>
   </tr>
 </table>
 
-Browser desktop, terminal, and installable phone app — all talking to the
+Browser desktop (dark or light), terminal, and installable phone app — all talking to the
 same local server, the same agents, the same memory.
 
 ## Why somora
