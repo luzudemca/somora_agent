@@ -7,7 +7,7 @@
 // pairs by turnId or gets its own row.
 
 import assert from 'node:assert/strict';
-import { historyEventsToMessages, mergeHistorySnapshot, type ChatMessage, type HistoryEvent } from './history';
+import { historyEventsToMessages, mergeHistorySnapshot, prependOlderMessages, type ChatMessage, type HistoryEvent } from './history';
 
 let ok = 0;
 let bad = 0;
@@ -152,6 +152,20 @@ const img = (id: string) => ({ type: 'image', id, filename: `${id}.png`, mime: '
   const withLive = mergeHistorySnapshot(snapshot, [msg('live', 30, 'still streaming')]);
   t('merge: newer live content survives a late snapshot', withLive.length === 3 && withLive[2]?.ts === 30);
   t('merge: an empty snapshot keeps live content', mergeHistorySnapshot([], [msg('live', 5, 'typing')]).length === 1);
+}
+
+// ── paged history (2026-10-12): the newest page first, older on scroll ──
+{
+  const msg = (id: string, ts: number): ChatMessage => ({ id, role: 'agent', ts, text: id }) as ChatMessage;
+  const page1 = [msg('c', 30), msg('d', 40)];
+  const older = [msg('a', 10), msg('b', 20)];
+  const shown = prependOlderMessages(older, page1);
+  t('older: a page lands in front, in order', shown.map((m) => m.id).join('') === 'abcd');
+  t('older: an overlapping page does not duplicate', prependOlderMessages([msg('b', 20), msg('c2', 30)], page1).map((m) => m.id).join('') === 'bcd');
+  // A reconnect snapshot is the newest page only: what was scrolled in stays.
+  const afterReconnect = mergeHistorySnapshot([msg('c', 30), msg('d', 40), msg('e', 50)], shown);
+  t('reconnect: scrolled-in older pages stay', afterReconnect.map((m) => m.id).join('') === 'abcde');
+  t('reconnect: no duplicates', new Set(afterReconnect.map((m) => m.id)).size === afterReconnect.length);
 }
 
 console.log(`\nhistory: ${ok} passed, ${bad} failed`);

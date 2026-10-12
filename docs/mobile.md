@@ -55,7 +55,7 @@ remembers it for a year.
 |---|---|
 | **Header** | Shows `agent · session ▾ model`. Tap it to switch session or model. On the right: the work badge, the screen-awake toggle and the voice toggle. |
 | **Avatar row** | One tile per agent. Tap to switch. The app remembers the last agent. |
-| **Chat** | The history of the open session. Replies are rendered as Markdown. A wide code block scrolls sideways. |
+| **Chat** | The history of the open session, newest first loaded. Scroll to the top, or tap **Load older messages**, for the next older part. Replies are rendered as Markdown. A wide code block scrolls sideways. |
 | **Input bar** | Paperclip, microphone, text field, Send. Enter sends, Shift+Enter starts a new line. |
 
 ## Sessions and model
@@ -83,10 +83,14 @@ only. The agent's own model is tagged `default`. Choosing it again
 removes the session's own choice. A model somora cannot reach at the
 moment is tagged `unreachable`.
 
-Above the models, a reasoning model shows its thinking level and where
-it comes from: `set for this session`, `agent's default`,
-`model's default`, or `model decides` with `nothing set`. The
-[thinking guide](thinking.md) explains the order.
+**Thinking.** Above the models: the thinking level for this session,
+with where it comes from (`set for this session`, `agent's default`,
+`model's default`, or `nothing set — the model decides`). Tap **off**,
+**low**, **med** or **high** to set it for this session. **auto**
+removes the session's own level, so the agent's or the model's default
+applies again. With a model that cannot think the level has no effect,
+and the sheet says so. The [thinking guide](thinking.md) explains the
+order.
 
 Good to know:
 
@@ -104,9 +108,17 @@ Restoring an archived one works here too.
 
 ### While the agent is working
 
-You can keep typing. A message sent during a running turn is queued and
-shows `⌛ queued`, or `⌛ queued · N ahead`. Queued messages run in
-order.
+You can keep typing. While a turn runs, a row above the text field says
+what the next message does. Tap it to switch:
+
+| Row | What the message does |
+|---|---|
+| `⌛ queue after this turn` | Waits until the turn is done. Shows `⌛ queued`, or `⌛ queued · N ahead`. Queued messages run in order. |
+| `⚡ steer into this turn` | Goes into the running turn. The model reads it at its next step. Shows `⚡ steering…`, then `⚡ steered`. |
+
+The agent's `steering:` setting in `agent.yaml` decides which way the
+row starts, the same as in the web client. When nothing steerable is
+running any more, a steered message queues as usual.
 
 - **↩ edit** next to a queued message takes it back into the text
   field. Send it again and it joins the end of the queue.

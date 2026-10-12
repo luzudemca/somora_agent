@@ -14,7 +14,11 @@ interface Props {
     text: string,
     attachments: AttachmentRef[],
     voice?: { inputModality?: 'voice'; autoPlayRequested?: boolean },
+    steer?: boolean,
   ) => Promise<void>;
+  /** agent.yaml `steering:` — what a message typed during a running
+   *  turn does by default; the row above the input flips it. */
+  steeringDefault?: boolean;
   /** When true and the current draft came from STT, the send call
    *  flags input_modality=voice + auto_play_requested=true. */
   autoPlayEnabled: boolean;
@@ -36,8 +40,15 @@ export function MessageInput({
   streaming = false,
   onAbort,
   draftInject,
+  steeringDefault = false,
 }: Props) {
   const [text, setText] = useState('');
+  // Steer into the running turn, or queue behind it — per message, like
+  // the web client's bolt. Back to the agent's default on agent change.
+  const [steerNext, setSteerNext] = useState(steeringDefault);
+  useEffect(() => {
+    setSteerNext(steeringDefault);
+  }, [agent, steeringDefault]);
   useEffect(() => {
     if (!draftInject) return;
     setText(draftInject.text);
@@ -80,7 +91,7 @@ export function MessageInput({
       ? { inputModality: 'voice' as const, autoPlayRequested: autoPlayEnabled }
       : undefined;
     try {
-      await onSend(payloadText, payloadAttachments, voice);
+      await onSend(payloadText, payloadAttachments, voice, streaming && steerNext);
     } catch (err) {
       // Restore state so the user can retry.
       setText(payloadText);
@@ -128,6 +139,18 @@ export function MessageInput({
 
   return (
     <>
+      {streaming && (
+        <button
+          type="button"
+          className={`steer-row ${steerNext ? 'on' : ''}`}
+          aria-pressed={steerNext}
+          onClick={() => setSteerNext((v) => !v)}
+          title="Tap to switch"
+        >
+          {steerNext ? '⚡ steer into this turn' : '⌛ queue after this turn'}
+          <span className="steer-row-hint">tap to switch</span>
+        </button>
+      )}
       <div className="input-bar">
         <AttachmentPicker
           staged={staged}

@@ -1217,7 +1217,21 @@ button { cursor: pointer; }
 }
 .sheet-row-tag.warn { color: var(--warn); border-color: var(--warn); }
 .sheet-row-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
-.sheet-thinking { display: block; padding: 2px 4px 6px 24px; }
+.sheet-thinking { display: flex; flex-direction: column; gap: 6px; padding: 4px 4px 10px; }
+.sheet-thinking-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: var(--text-1); font-size: 13px; }
+.sheet-thinking-levels { display: flex; gap: 4px; }
+.sheet-thinking-levels button {
+  flex: 1;
+  min-height: 34px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-1);
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+}
+.sheet-thinking-levels button.active { color: var(--bg-0); background: var(--accent); border-color: var(--accent); font-weight: 600; }
+.sheet-thinking-levels button:disabled { opacity: 0.6; }
 .archived-row:active { background: transparent; }
 .archived-restore {
   flex: none;
@@ -1254,3 +1268,40 @@ button { cursor: pointer; }
   padding: 1px 8px;
   cursor: pointer;
 }
+
+/* Older history above the loaded page (ChatArea). */
+.chat-older {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 4px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+.chat-older button {
+  font: inherit;
+  color: var(--text-1);
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  padding: 6px 14px;
+}
+
+/* Steer or queue the next message while a turn runs (MessageInput). */
+.steer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-1);
+  background: var(--bg-1);
+  border: none;
+  border-top: 1px solid var(--line);
+  text-align: left;
+}
+.steer-row.on { color: var(--accent); }
+.steer-row-hint { color: var(--text-3); font-size: 11px; }
+.msg-steer { color: var(--accent); }

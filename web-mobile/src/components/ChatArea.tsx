@@ -3,7 +3,7 @@
 // alone). All chat-stream state is passed in from MobileApp — no
 // SSE-owning hook here, to keep the subscription single per active agent.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { ChatImage, chatImageUrl } from '../../../web/src/components/ChatImage';
 
@@ -60,6 +60,11 @@ interface Props {
    *  Wired to useChatStream.recall by MobileApp; the "↩ edit" button
    *  on a queued bubble calls it with the bubble's id. */
   onRecall?: (messageId: string) => void;
+  /** Older history exists; scrolling to the top (or the button there)
+   *  loads the next page. */
+  hasOlder?: boolean;
+  loadingOlder?: boolean;
+  onLoadOlder?: () => void;
 }
 
 export function ChatArea({
@@ -71,9 +76,24 @@ export function ChatArea({
   agents,
   onAbort,
   onRecall,
+  hasOlder = false,
+  loadingOlder = false,
+  onLoadOlder,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
+  // Older history: asked for when the list is scrolled near its top;
+  // the read position stays put while the page lands above it.
+  const olderRef = useRef({ hasOlder, loadingOlder, onLoadOlder });
+  olderRef.current = { hasOlder, loadingOlder, onLoadOlder };
+  const keepPositionRef = useRef<{ height: number; top: number } | null>(null);
+  const askOlder = () => {
+    const el = scrollRef.current;
+    const o = olderRef.current;
+    if (!el || !o.hasOlder || o.loadingOlder || !o.onLoadOlder || keepPositionRef.current) return;
+    keepPositionRef.current = { height: el.scrollHeight, top: el.scrollTop };
+    o.onLoadOlder();
+  };
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -81,10 +101,19 @@ export function ChatArea({
     const onScroll = () => {
       const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
       userScrolledUpRef.current = distance > 80;
+      if (el.scrollTop < 200) askOlder();
     };
     el.addEventListener('scroll', onScroll, { passive: true });
     return () => el.removeEventListener('scroll', onScroll);
   }, []);
+
+  useLayoutEffect(() => {
+    const keep = keepPositionRef.current;
+    const el = scrollRef.current;
+    if (!keep || !el || loadingOlder) return;
+    el.scrollTop = el.scrollHeight - keep.height + keep.top;
+    keepPositionRef.current = null;
+  }, [messages, loadingOlder]);
 
   useEffect(() => {
     if (userScrolledUpRef.current) return;
@@ -117,6 +146,17 @@ export function ChatArea({
       {connectionError && <div className="banner info">{connectionError}</div>}
       {statusNotice && <div className="banner info">{statusNotice}</div>}
       <div className="chat-scroll" ref={scrollRef}>
+        {hasOlder && (
+          <div className="chat-older">
+            {loadingOlder ? (
+              <span>Loading older messages…</span>
+            ) : (
+              <button type="button" onClick={askOlder}>
+                Load older messages
+              </button>
+            )}
+          </div>
+        )}
         {messages.length === 0 && !streaming && (
           <div className="chat-empty">
             Say something to <strong>{agent}</strong>.
@@ -301,6 +341,12 @@ function MobileMessage({
           )}
         </div>
         <span className="msg-time">
+          {msg.role === 'user' && msg.steer && (
+            <span className="msg-queued msg-steer" title={msg.pending ? 'Waiting for the running turn to read it' : 'Read by the running turn'}>
+              <span>⚡ {msg.pending ? 'steering…' : 'steered'}</span>
+              <span className="msg-queued-sep">·</span>
+            </span>
+          )}
           {msg.role === 'user' && msg.queued && (
             <span className="msg-queued" title="Waiting for the previous turn to finish">
               <HourglassIcon />

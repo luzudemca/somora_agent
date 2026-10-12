@@ -20,6 +20,15 @@ import {
   type OpenSession,
 } from '../hooks/session-pick';
 
+type ThinkingChoice = 'default' | 'off' | 'low' | 'medium' | 'high';
+const THINKING_CHOICES: Array<{ level: ThinkingChoice; label: string }> = [
+  { level: 'default', label: 'auto' },
+  { level: 'off', label: 'off' },
+  { level: 'low', label: 'low' },
+  { level: 'medium', label: 'med' },
+  { level: 'high', label: 'high' },
+];
+
 type ModelRow = ModelOption & { unavailable?: { since: number; until: number; reason: string } };
 
 const SESSION_LIMIT = 6;
@@ -62,6 +71,7 @@ export function SessionSheet({
   const [note, setNote] = useState<string | null>(null);
   const [switching, setSwitching] = useState<string | null>(null);
   const [thinking, setThinking] = useState<{ effective: string | null; source: string; modelSupportsReasoning: boolean } | null>(null);
+  const [settingThinking, setSettingThinking] = useState(false);
   // null = the archived list is closed; an array once it was opened.
   const [archived, setArchived] = useState<SessionSummary[] | null>(null);
   const [archiveAll, setArchiveAll] = useState(false);
@@ -121,6 +131,27 @@ export function SessionSheet({
       cancelled = true;
     };
   }, [open, agent, session.id, modelInfo?.provider, modelInfo?.modelId]);
+
+  // Thinking level for this session, as in the web client's chat menu:
+  // `default` removes the session's own level (agent or model default
+  // then applies, or the model decides).
+  const thinkingUrl = `/agents/${encodeURIComponent(agent)}/sessions/${encodeURIComponent(session.id)}/thinking`;
+  const setThinkingLevel = async (level: ThinkingChoice) => {
+    setSettingThinking(true);
+    try {
+      const res =
+        level === 'default'
+          ? await fetch(thinkingUrl, { method: 'DELETE' })
+          : await fetch(thinkingUrl, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ level }) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const fresh = await fetch(thinkingUrl).then((r) => (r.ok ? r.json() : null));
+      if (fresh) setThinking(fresh);
+    } catch (err) {
+      setNote(`Could not set thinking (${err instanceof Error ? err.message : String(err)})`);
+    } finally {
+      setSettingThinking(false);
+    }
+  };
 
   // Another agent's list must not flash while the new one loads.
   useEffect(() => {
@@ -368,17 +399,43 @@ export function SessionSheet({
             <h3>Model for this session</h3>
             {streaming && <span className="sheet-row-meta">applies from the next turn</span>}
           </div>
-          {thinking?.modelSupportsReasoning && (
-            <div className="sheet-row-meta sheet-thinking">
-              thinking: {thinking.effective ?? 'model decides'}
-              {' · '}
-              {thinking.source === 'session-override'
-                ? 'set for this session'
-                : thinking.source === 'persona-default'
-                  ? "agent's default"
-                  : thinking.source === 'model-default'
-                    ? "model's default"
-                    : 'nothing set'}
+          {thinking && (
+            <div className="sheet-thinking">
+              <div className="sheet-thinking-head">
+                <span>Thinking</span>
+                <span className="sheet-row-meta">
+                  {thinking.source === 'session-override'
+                    ? 'set for this session'
+                    : thinking.source === 'persona-default'
+                      ? "agent's default"
+                      : thinking.source === 'model-default'
+                        ? "model's default"
+                        : 'nothing set — the model decides'}
+                </span>
+              </div>
+              <div className="sheet-thinking-levels" role="group" aria-label="Thinking level">
+                {THINKING_CHOICES.map((c) => {
+                  const lit = c.level === 'default' ? thinking.source !== 'session-override' : thinking.source === 'session-override' && thinking.effective === c.level;
+                  return (
+                    <button
+                      key={c.level}
+                      type="button"
+                      className={lit ? 'active' : ''}
+                      aria-pressed={lit}
+                      disabled={settingThinking}
+                      onClick={() => void setThinkingLevel(c.level)}
+                    >
+                      {c.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {thinking.source !== 'session-override' && thinking.effective && (
+                <div className="sheet-row-meta">in effect: {thinking.effective}</div>
+              )}
+              {!thinking.modelSupportsReasoning && (
+                <div className="sheet-row-meta">this model does not think — the level has no effect</div>
+              )}
             </div>
           )}
           {models === null && !loadError && <div className="work-sheet-empty">loading…</div>}

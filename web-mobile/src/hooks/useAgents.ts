@@ -11,6 +11,9 @@ export interface AgentInfo {
   role?: string;
   description?: string;
   enabled?: boolean;
+  /** agent.yaml `steering:` — default for a message typed while a turn
+   *  runs: into that turn (true) or queued behind it. */
+  steering?: boolean;
 }
 
 const POLL_INTERVAL_MS = 30_000;

@@ -90,6 +90,12 @@ export interface ChatMessage {
    *  the agent's reply for the CURRENT turn stays above messages
    *  the user typed while waiting. */
   pending?: boolean;
+  /** user rows: sent with steering into the running turn. With
+   *  `pending` still set the model has not read it yet ("steering…");
+   *  without, it has ("steered"). `steerId` pairs it with the server's
+   *  user_message. */
+  steer?: boolean;
+  steerId?: string;
 }
 
 export interface HistoryEvent {
@@ -106,6 +112,8 @@ export interface HistoryEvent {
   from_system?: FromSystem;
   /** Structured origin of a `user_message` row (since 2026-09-13). */
   origin?: TurnOrigin;
+  /** `user_message` steered into a running turn. */
+  steer?: boolean;
   audio?: { url: string; mime: string; durationMs?: number; cacheKey: string };
   media?: Array<{ type: string; id: string; filename: string; mime: string; url: string }>;
   /** `kind: 'model_fallback'` rows. */
@@ -144,6 +152,7 @@ export function eventToMessage(ev: HistoryEvent): ChatMessage | null {
       ...(ev.from_agent ? { fromAgent: ev.from_agent } : {}),
       ...(ev.from_system ? { fromSystem: ev.from_system } : {}),
       ...(ev.origin ? { origin: ev.origin } : {}),
+      ...(ev.steer ? { steer: true } : {}),
     };
   }
   if (ev.kind === 'assistant_message') {
@@ -291,6 +300,20 @@ export function historyEventsToMessages(events: readonly HistoryEvent[]): ChatMe
  * snapshot after a silent reconnect at all.
  */
 export function mergeHistorySnapshot(restored: ChatMessage[], live: readonly ChatMessage[]): ChatMessage[] {
-  const newestPersistedTs = restored.length > 0 ? restored[restored.length - 1]!.ts : 0;
-  return [...restored, ...live.filter((m) => m.ts > newestPersistedTs)];
+  if (restored.length === 0) return [...live];
+  const oldestPersistedTs = restored[0]!.ts;
+  const newestPersistedTs = restored[restored.length - 1]!.ts;
+  // The snapshot is the newest window only: what was scrolled in before
+  // it stays, what the stream added after it stays.
+  return [
+    ...live.filter((m) => m.ts < oldestPersistedTs),
+    ...restored,
+    ...live.filter((m) => m.ts > newestPersistedTs),
+  ];
+}
+
+/** An older page of history in front of what is shown. */
+export function prependOlderMessages(older: ChatMessage[], shown: readonly ChatMessage[]): ChatMessage[] {
+  const firstShownTs = shown.length > 0 ? shown[0]!.ts : Number.POSITIVE_INFINITY;
+  return [...older.filter((m) => m.ts < firstShownTs), ...shown];
 }

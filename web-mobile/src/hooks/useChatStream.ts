@@ -35,6 +35,7 @@ import {
   findTurnRow,
   historyEventsToMessages,
   mergeHistorySnapshot,
+  prependOlderMessages,
   newId,
   type ChatMessage,
   type ModelFallback,
@@ -68,6 +69,12 @@ export interface ChatStream {
   /** True from the moment the user sends until the server emits
    *  agent.phase='end'. */
   streaming: boolean;
+  /** Older history exists beyond what is loaded. The list starts with
+   *  the newest HISTORY_PAGE events, like the web client; scrolling to
+   *  the top loads the next page. */
+  hasOlder: boolean;
+  loadingOlder: boolean;
+  loadOlder: () => Promise<void>;
   /** Transient status line (abort outcome, etc.). Cleared by the
    *  next successful send or after a short timer in the consumer. */
   statusNotice: string | null;
@@ -79,6 +86,9 @@ export interface ChatStream {
     text: string,
     attachments?: AttachmentRef[],
     voice?: { inputModality?: 'voice'; autoPlayRequested?: boolean },
+    /** Into the running turn instead of the queue (agent.yaml `steering:`
+     *  is the default; the composer's toggle flips it per message). */
+    steer?: boolean,
   ) => Promise<void>;
   /** Voice: callback invoked when an `assistant_audio` event arrives.
    *  Caller decides whether to auto-play (typically gated by their
@@ -118,8 +128,22 @@ export interface ChatStream {
 
 export type TurnQueueEvent = 'turn_queued' | 'turn_dequeued' | 'turn_started' | 'turn_end';
 
+/** History events per page — the same as the web client. A long
+ *  session (tens of MB of history) loads in a fraction of a second. */
+const HISTORY_PAGE = 100;
+
+interface HistoryPage {
+  events?: HistoryEvent[];
+  hasMore?: boolean;
+  oldestTs?: number;
+}
+
 export function useChatStream(agent: string | null, session: string = 'main'): ChatStream {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Where the loaded window starts, and whether there is more before it.
+  const pageRef = useRef<{ oldestTs: number | null; inFlight: boolean; key: string }>({ oldestTs: null, inFlight: false, key: '' });
+  const [hasOlder, setHasOlder] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
@@ -183,14 +207,26 @@ export function useChatStream(agent: string | null, session: string = 'main'): C
     //    already delivered something newer would otherwise replace the
     //    list and take that with it — one of the two ways an answer
     //    disappeared after a connection blip (2026-09-09 report).
+    //    Only the newest page — also after a reconnect, which used to
+    //    fetch the whole session again (85 MB for a long one).
+    const pageKey = `${agent}\u0000${session}`;
+    pageRef.current = { oldestTs: null, inFlight: false, key: pageKey };
+    setHasOlder(false);
+    setLoadingOlder(false);
     const syncHistory = () =>
-      fetch(`/chat/history?agent=${encodeURIComponent(agent)}&session=${encodeURIComponent(session)}`)
+      fetch(`/chat/history?agent=${encodeURIComponent(agent)}&session=${encodeURIComponent(session)}&limit=${HISTORY_PAGE}`)
         .then(async (res) => {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const body = (await res.json()) as { events?: HistoryEvent[] };
+          const body = (await res.json()) as HistoryPage;
           if (cancelled) return;
           const restored = historyEventsToMessages(body.events ?? []);
           setMessages((prev) => mergeHistorySnapshot(restored, prev));
+          // The first page sets where older history starts; a later
+          // snapshot after a reconnect leaves pages already scrolled in.
+          if (pageRef.current.key === pageKey && pageRef.current.oldestTs === null) {
+            pageRef.current.oldestTs = typeof body.oldestTs === 'number' ? body.oldestTs : null;
+            setHasOlder(Boolean(body.hasMore) && typeof body.oldestTs === 'number');
+          }
         })
         .catch((err) => {
           if (cancelled) return;
@@ -557,11 +593,43 @@ export function useChatStream(agent: string | null, session: string = 'main'): C
             from_session?: string;
             from_system?: FromSystem;
             origin?: TurnOrigin;
+            steer?: true;
+            steer_id?: string;
           }
         | null = null;
       try { d = JSON.parse(e.data); } catch { return; }
       if (!d || typeof d.text !== 'string') return;
       const dd = d;
+      if (dd.steer) {
+        // The running turn's model read a steered message: the bubble
+        // goes from "steering…" to "steered" (or appears, when another
+        // client sent it).
+        setMessages((prev) => {
+          let idx = dd.steer_id ? prev.findIndex((m) => m.role === 'user' && m.steerId === dd.steer_id) : -1;
+          if (idx < 0) idx = prev.findIndex((m) => m.role === 'user' && m.pending && m.steer && m.text === dd.text);
+          if (idx >= 0) {
+            const { pending: _p, queued: _q, ...rest } = prev[idx]!;
+            const next = prev.slice();
+            next[idx] = { ...rest, steer: true, ts: dd.ts ?? rest.ts } as ChatMessage;
+            return next;
+          }
+          return [
+            ...prev,
+            {
+              id: newId('u'),
+              role: 'user',
+              text: dd.text!,
+              ts: dd.ts ?? Date.now(),
+              steer: true,
+              ...(dd.steer_id ? { steerId: dd.steer_id } : {}),
+              ...(dd.turnId ? { turnId: dd.turnId } : {}),
+              ...(dd.from_agent ? { fromAgent: dd.from_agent } : {}),
+              ...(dd.origin ? { origin: dd.origin } : {}),
+            },
+          ];
+        });
+        return;
+      }
       // Dedupe + append in a SINGLE setMessages updater so the
       // decision is atomic. Three cases:
       //   1. Self-typed echo with matching pending bubble in OUR
@@ -726,7 +794,7 @@ export function useChatStream(agent: string | null, session: string = 'main'): C
     return () => clearTimeout(t);
   }, [statusNotice]);
 
-  const send: ChatStream['send'] = async (text, attachments, voice) => {
+  const send: ChatStream['send'] = async (text, attachments, voice, steer) => {
     if (!agent) return;
     setStatusNotice(null);
     // Optimistically add the user's message so the bubble appears
@@ -743,6 +811,7 @@ export function useChatStream(agent: string | null, session: string = 'main'): C
         ? `📎 ${attachments.map((a) => a.name).join(', ')}`
         : ''),
       pending: true,
+      ...(steer ? { steer: true } : {}),
     };
     setMessages((prev) => [...prev, userMsg]);
     setStreaming(true);
@@ -759,10 +828,23 @@ export function useChatStream(agent: string | null, session: string = 'main'): C
             : {}),
           ...(voice?.inputModality === 'voice' ? { input_modality: 'voice' as const } : {}),
           ...(voice?.autoPlayRequested ? { auto_play_requested: true } : {}),
+          ...(steer ? { steer: true } : {}),
         }),
       });
       if (!res.ok) throw new Error(`chat/send ${res.status}`);
-      const body = (await res.json().catch(() => ({}))) as { turnId?: string };
+      const body = (await res.json().catch(() => ({}))) as { turnId?: string; steered?: boolean; steerId?: string };
+      if (steer && body.steered && body.steerId) {
+        // Went into the running turn. The bubble stays `pending`
+        // ("steering…") until the user_message with this steer_id says
+        // the model read it.
+        const steerId = body.steerId;
+        setMessages((prev) => prev.map((m) => (m.id === localId && m.role === 'user' ? { ...m, steer: true, steerId } : m)));
+        return;
+      }
+      if (steer) {
+        // Nothing steerable was running: it queued as a normal turn.
+        setMessages((prev) => prev.map((m) => (m.id === localId && m.role === 'user' ? { ...m, steer: false } : m)));
+      }
       const turnId = typeof body.turnId === 'string' ? body.turnId : '';
       if (turnId) {
         // If turn_queued already arrived before we got the HTTP
@@ -924,9 +1006,37 @@ export function useChatStream(agent: string | null, session: string = 'main'): C
     }
   };
 
+  const loadOlder = async (): Promise<void> => {
+    const page = pageRef.current;
+    if (!agent || page.inFlight || page.oldestTs === null) return;
+    const key = page.key;
+    page.inFlight = true;
+    setLoadingOlder(true);
+    try {
+      const res = await fetch(
+        `/chat/history?agent=${encodeURIComponent(agent)}&session=${encodeURIComponent(session)}&limit=${HISTORY_PAGE}&before=${page.oldestTs}`,
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = (await res.json()) as HistoryPage;
+      if (pageRef.current.key !== key) return; // switched session meanwhile
+      const older = historyEventsToMessages(body.events ?? []);
+      setMessages((prev) => prependOlderMessages(older, prev));
+      pageRef.current.oldestTs = typeof body.oldestTs === 'number' ? body.oldestTs : null;
+      setHasOlder(Boolean(body.hasMore) && typeof body.oldestTs === 'number');
+    } catch (err) {
+      console.warn('[somora-mobile] loading older history failed:', err);
+    } finally {
+      if (pageRef.current.key === key) pageRef.current.inFlight = false;
+      setLoadingOlder(false);
+    }
+  };
+
   return {
     messages,
     streaming,
+    hasOlder,
+    loadingOlder,
+    loadOlder,
     send,
     subscribeAudio,
     abort,

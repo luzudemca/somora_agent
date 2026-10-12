@@ -481,6 +481,9 @@ export function MobileApp() {
             statusNotice={chat.statusNotice}
             streaming={chat.streaming}
             onAbort={() => void chat.abort()}
+            hasOlder={chat.hasOlder}
+            loadingOlder={chat.loadingOlder}
+            onLoadOlder={() => void chat.loadOlder()}
             onRecall={(id) => {
               void chat.recall(id).then((r) => {
                 if (r) setDraftInject({ text: r.text, nonce: Date.now() });
@@ -494,6 +497,7 @@ export function MobileApp() {
             streaming={chat.streaming}
             onAbort={() => void chat.abort()}
             draftInject={draftInject}
+            steeringDefault={agents.find((a) => a.name === activeAgent)?.steering === true}
           />
         </>
       ) : (
