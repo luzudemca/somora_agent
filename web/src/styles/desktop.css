@@ -426,8 +426,13 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
 .taskbar-tools {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
+  height: 36px;
+  padding-right: 10px;
+  border-right: 1px solid var(--line);
 }
+/* icon-only buttons in the tools group */
+.taskbar-tools .taskbar-tool { padding: 0 9px; position: relative; }
 .taskbar-tool {
   height: 36px;
   padding: 0 10px;
@@ -554,13 +559,17 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
   color: var(--text-0);
-  padding: 0 10px 0 6px;
+  padding: 0 2px 0 12px;
   border-left: 1px solid var(--line);
   margin-left: 4px;
   height: 36px;
   display: flex;
   flex-direction: column;
   justify-content: center;
+  align-items: flex-end;
+  text-align: right;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
 }
 .taskbar-clock small {
   font-size: 10px;
@@ -2197,8 +2206,6 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
 
 /* Inbox (InboxMenu): opens up from the taskbar, right-aligned. */
 .inbox-menu {
-  left: auto;
-  right: 0;
   width: 380px;
   max-width: calc(100vw - 24px);
   max-height: 60vh;

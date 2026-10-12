@@ -7,7 +7,7 @@ import { useBrowsers } from './BrowserProvider';
 // terminate.
 
 import { useEffect, useRef, useState } from 'react';
-import { Grid3x3, LogOut, Maximize, Minimize, Pin, Power, RefreshCw, Settings, Sparkles } from 'lucide-react';
+import { Grid3x3, LogOut, Maximize, Minimize, Monitor, Pin, Power, RefreshCw, Settings, Sparkles } from 'lucide-react';
 import { Koala } from './Koala';
 import type { WindowState } from '../types/window';
 import { api, type AgentInfo } from '../lib/api';
@@ -55,6 +55,24 @@ export function Taskbar({
   } | null>(null);
   const [toast, setToast] = useState<{ text: string; tone: 'info' | 'warn' | 'error' } | null>(null);
   const gearRef = useRef<HTMLDivElement | null>(null);
+  // Screen menu: arrange, save, restore, full screen.
+  const [screenOpen, setScreenOpen] = useState(false);
+  const screenRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!screenOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (screenRef.current && !screenRef.current.contains(e.target as Node)) setScreenOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setScreenOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [screenOpen]);
 
   useEffect(() => {
     if (!toast) return;
@@ -236,6 +254,14 @@ export function Taskbar({
   const time = clock.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const date = clock.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
 
+  // Notices from the gear's actions (reload, restart) — next to the
+  // window buttons, where there is room for a line of text.
+  const toastNode = toast ? (
+    <span className={`taskbar-toast taskbar-toast-${toast.tone}`} role="status" title={toast.text}>
+      {toast.text}
+    </span>
+  ) : null;
+
   return (
     <div className="taskbar">
       <div className="taskbar-logo">
@@ -248,78 +274,8 @@ export function Taskbar({
         </div>
       </div>
 
-      {waiting.length > 0 && <button type="button" className="browser-attention" onClick={onOpenBrowsers} title={waiting.map((b) => `${b.handoff!.agent}: ${b.handoff!.reason}`).join('\n')}>Browser · {waiting.length} waiting for you</button>}
-      <div className="taskbar-windows">
-        {windows.map((w) => {
-          const agent =
-            w.kind === 'chat' && w.agentName
-              ? agents.find((a) => a.name === w.agentName)
-              : undefined;
-          const color = agent ? resolveAgentColor(agent) : undefined;
-          const isFocused = focusedId === w.id && !w.minimized;
-          // Render the label LIVE from (agentName, sessionId). The
-          // window's `title` is cached at open-time and goes stale
-          // when the user runs `/session <slug>` — we'd display the
-          // old session name forever. Falling back to title only when
-          // the window isn't a chat (no sessionId to show).
-          // Label shows the human slug; the tooltip keeps the full
-          // technical id (user request 2026-07-21 — taskbar: slug only,
-          // chat header: both).
-          const live =
-            w.kind === 'chat' && w.agentName
-              ? `${w.agentName} · ${sessionSlug(w.sessionId ?? 'main')}`
-              : w.title;
-          const tooltip =
-            w.kind === 'chat' && w.agentName
-              ? `${w.agentName} · ${w.sessionId ?? 'main'}`
-              : w.title;
-          return (
-            <button
-              key={w.id}
-              type="button"
-              className={[
-                'taskbar-window',
-                isFocused ? 'focused' : '',
-                w.minimized ? 'minimized' : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              onClick={() => onFocus(w.id)}
-              title={tooltip}
-              style={color ? ({ '--row-color': color } as React.CSSProperties) : undefined}
-            >
-              <span
-                className="taskbar-window-dot"
-                style={
-                  color
-                    ? { background: color, boxShadow: `0 0 6px ${color}88` }
-                    : undefined
-                }
-              />
-              <span
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {agent && <span style={{ fontSize: 12 }}>{agent.icon ?? '🤖'}</span>}
-                <span className="taskbar-window-title">{live}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
 
       <div className="taskbar-tools">
-        {toast && (
-          <span className={`taskbar-toast taskbar-toast-${toast.tone}`} role="status" title={toast.text}>
-            {toast.text}
-          </span>
-        )}
         <InboxMenu />
         <div className="taskbar-gear" ref={gearRef}>
           <button
@@ -393,45 +349,109 @@ export function Taskbar({
             </div>
           )}
         </div>
-        <button
-          className="taskbar-tool"
-          type="button"
-          title="Auto-arrange windows"
-          onClick={onAutoArrange}
-        >
-          <Grid3x3 size={14} />
-          <span>Arrange</span>
-        </button>
-        <button
-          className="taskbar-tool"
-          type="button"
-          title="Save current layout"
-          onClick={onSaveLayout}
-        >
-          <Pin size={14} />
-          <span>Save</span>
-        </button>
-        <button
-          className="taskbar-tool"
-          type="button"
-          title="Restore saved layout"
-          onClick={onRestoreLayout}
-        >
-          <Sparkles size={14} />
-          <span>Restore</span>
-        </button>
-        {fullscreenSupported && (
+        <div className="taskbar-gear" ref={screenRef}>
           <button
             className="taskbar-tool"
             type="button"
-            title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-            onClick={toggleFullscreen}
+            title="Screen: arrange, save and restore the layout, full screen"
+            aria-haspopup="menu"
+            aria-expanded={screenOpen}
+            onClick={() => setScreenOpen((v) => !v)}
           >
-            {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
-            <span>{isFullscreen ? 'Windowed' : 'Fullscreen'}</span>
+            <Monitor size={14} />
           </button>
-        )}
+          {screenOpen && (
+            <div className="taskbar-menu" role="menu">
+              <button className="taskbar-menu-item" type="button" role="menuitem" onClick={() => { setScreenOpen(false); onAutoArrange(); }} title="Tile all windows that are not minimized">
+                <Grid3x3 size={13} />
+                <span>Arrange windows</span>
+              </button>
+              <button className="taskbar-menu-item" type="button" role="menuitem" onClick={() => { setScreenOpen(false); onSaveLayout(); }} title="Store the current layout">
+                <Pin size={13} />
+                <span>Save layout</span>
+              </button>
+              <button className="taskbar-menu-item" type="button" role="menuitem" onClick={() => { setScreenOpen(false); onRestoreLayout(); }} title="Bring the saved layout back">
+                <Sparkles size={13} />
+                <span>Restore layout</span>
+              </button>
+              {fullscreenSupported && (
+                <button className="taskbar-menu-item" type="button" role="menuitem" onClick={() => { setScreenOpen(false); toggleFullscreen(); }}>
+                  {isFullscreen ? <Minimize size={13} /> : <Maximize size={13} />}
+                  <span>{isFullscreen ? 'Leave full screen' : 'Full screen'}</span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
+
+      {waiting.length > 0 && <button type="button" className="browser-attention" onClick={onOpenBrowsers} title={waiting.map((b) => `${b.handoff!.agent}: ${b.handoff!.reason}`).join('\n')}>Browser · {waiting.length} waiting for you</button>}
+      <div className="taskbar-windows">
+        {windows.map((w) => {
+          const agent =
+            w.kind === 'chat' && w.agentName
+              ? agents.find((a) => a.name === w.agentName)
+              : undefined;
+          const color = agent ? resolveAgentColor(agent) : undefined;
+          const isFocused = focusedId === w.id && !w.minimized;
+          // Render the label LIVE from (agentName, sessionId). The
+          // window's `title` is cached at open-time and goes stale
+          // when the user runs `/session <slug>` — we'd display the
+          // old session name forever. Falling back to title only when
+          // the window isn't a chat (no sessionId to show).
+          // Label shows the human slug; the tooltip keeps the full
+          // technical id (user request 2026-07-21 — taskbar: slug only,
+          // chat header: both).
+          const live =
+            w.kind === 'chat' && w.agentName
+              ? `${w.agentName} · ${sessionSlug(w.sessionId ?? 'main')}`
+              : w.title;
+          const tooltip =
+            w.kind === 'chat' && w.agentName
+              ? `${w.agentName} · ${w.sessionId ?? 'main'}`
+              : w.title;
+          return (
+            <button
+              key={w.id}
+              type="button"
+              className={[
+                'taskbar-window',
+                isFocused ? 'focused' : '',
+                w.minimized ? 'minimized' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              onClick={() => onFocus(w.id)}
+              title={tooltip}
+              style={color ? ({ '--row-color': color } as React.CSSProperties) : undefined}
+            >
+              <span
+                className="taskbar-window-dot"
+                style={
+                  color
+                    ? { background: color, boxShadow: `0 0 6px ${color}88` }
+                    : undefined
+                }
+              />
+              <span
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {agent && <span style={{ fontSize: 12 }}>{agent.icon ?? '🤖'}</span>}
+                <span className="taskbar-window-title">{live}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {toastNode}
 
       <div className="taskbar-stat">
         <span title="1-min CPU load average / cores. >100% = overloaded.">

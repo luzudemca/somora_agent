@@ -130,7 +130,7 @@ Windows never leave the desktop. Dragging and resizing stop at the
 edges, and no window can cover the taskbar. When the browser gets
 smaller, windows that no longer fit are pushed back inside, and shrunk
 only when they are bigger than the desktop. Nothing grows back by
-itself: use **Restore** for that.
+itself: use **Restore layout** in the screen menu for that.
 
 There is one chat window per conversation. Opening a session that is
 already on the desktop brings its window forward, whether you come from
@@ -146,17 +146,15 @@ The bar at the bottom always stays on top. From left to right:
 | Part | What it does |
 |---|---|
 | Koala, name and version | The somora mascot and the server version. |
-| `Browser · N waiting for you` | Appears when an agent handed the shared browser to you. Opens the browser list. |
-| Window buttons | One per open window, in the agent's colour. Click to focus or bring back a minimized window. |
 | Inbox | Updates, messages from somora.ai and things that need you, with a count of what is new. See "Inbox". |
 | Gear | Server menu: reload config, restart, sign out. |
-| **Arrange** | Tiles all windows that are not minimized. |
-| **Save** and **Restore** | Stores the current layout as a snapshot and brings it back later. |
-| **Fullscreen** | Switches the browser to full screen. Hidden where the browser cannot do it. |
+| Screen | **Arrange windows**, **Save layout** and **Restore layout** (a snapshot of the layout, brought back later), **Full screen** where the browser can do it. |
+| `Browser · N waiting for you` | Appears when an agent handed the shared browser to you. Opens the browser list. |
+| Window buttons | One per open window, in the agent's colour. Click to focus or bring back a minimized window. |
 | `cpu` and `mem` | Load and memory of the host, refreshed every 5 seconds. |
 | Clock | Time and date. |
 
-**Arrange** fills the whole desktop. Counts that fill a grid (1, 2, 4,
+**Arrange windows** fills the whole desktop. Counts that fill a grid (1, 2, 4,
 6) become an even grid. With 3, 5 or 7 windows the leftmost one takes
 the full height and the others stack beside it. Windows keep their
 order, so arranging twice changes nothing.
@@ -584,7 +582,7 @@ the server.
 |---|---|
 | `somora-desktop-icons` | Where you placed the icons. |
 | `somora-web-layout` | The open windows, saved as you go. |
-| `somora-web-layout-saved` | The snapshot made with **Save**. |
+| `somora-web-layout-saved` | The snapshot made with **Save layout**. |
 | `somora-chat-zoom` | Text size per agent and session. |
 | `somora.web.showTools.<agent>::<session>` | The **tools** toggle. The same pattern with `showMemory` and `showThinking`. |
 | `somora.voice.autoPlay.<agent>::<session>` | The **voice** toggle. |
