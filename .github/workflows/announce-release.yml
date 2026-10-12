@@ -1,0 +1,32 @@
+name: Announce release on Discord
+
+on:
+  release:
+    types: [published]
+
+# Needs nothing from the repository: it only posts to Discord.
+permissions: {}
+
+jobs:
+  discord:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Post to Discord
+        env:
+          # passed via env, never inlined into the script (release text is untrusted input)
+          WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+          TAG: ${{ github.event.release.tag_name }}
+          NAME: ${{ github.event.release.name }}
+          URL: ${{ github.event.release.html_url }}
+          PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          if [ "$PRERELEASE" = "true" ]; then echo "pre-release, not announced"; exit 0; fi
+          if [ -z "$WEBHOOK" ]; then echo "DISCORD_RELEASE_WEBHOOK is not set"; exit 0; fi
+          # "v2026.1011.1 — video from your own files, ..." -> "Video from your own files, ..."
+          SUMMARY="${NAME#*— }"
+          [ "$SUMMARY" = "$NAME" ] && SUMMARY=""
+          SUMMARY="${SUMMARY^}"
+          CONTENT=$(printf '## 🚀 somora %s\n%s\n\nUpdate with `somora update`\n📄 Full release notes: <%s>' "$TAG" "$SUMMARY" "$URL")
+          jq -n --arg c "$CONTENT" '{content: $c, username: "somora releases"}' \
+            | curl -fsS -H 'Content-Type: application/json' -d @- "$WEBHOOK"
