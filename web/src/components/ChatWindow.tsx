@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { api, type AgentInfo, type AttachmentRef } from '../lib/api';
 import type { ModelFallback } from '../types/chat';
-import { gradientFor, resolveAgentColor } from '../lib/colors';
+import { gradientFor, inkVars, resolveAgentColor } from '../lib/colors';
 import { hasTechnicalId, sessionSlug } from '../lib/session-label';
 import { useSessionInfo } from '../hooks/useSessionInfo';
 import { useAgents } from '../hooks/useAgents';
@@ -1012,8 +1012,9 @@ export function ChatWindow({
             pointerEvents: 'none',
             fontFamily: '"JetBrains Mono", monospace',
             fontSize: 14,
-            color,
+            ...inkVars(color),
           }}
+          className="agent-ink"
         >
           drop to attach
         </div>
@@ -1038,10 +1039,11 @@ export function ChatWindow({
             <span>{agent.name}</span>
             {agent.role && (
               <span
+                className="agent-ink"
                 style={{
                   fontSize: 9,
                   fontFamily: '"JetBrains Mono", monospace',
-                  color,
+                  ...inkVars(color),
                   background: `${color}15`,
                   border: `1px solid ${color}40`,
                   padding: '1px 6px',
@@ -1183,6 +1185,7 @@ export function ChatWindow({
               type="button"
               onClick={() => setShowTools((v) => !v)}
               title={showTools ? 'tool-call rendering on' : 'tool-call rendering off'}
+              className={showTools ? 'agent-ink' : undefined}
               style={{
                 all: 'unset',
                 cursor: 'pointer',
@@ -1193,7 +1196,7 @@ export function ChatWindow({
                 borderRadius: 3,
                 background: showTools ? `${color}25` : 'transparent',
                 border: showTools ? `1px solid ${color}55` : '1px solid var(--line)',
-                color: showTools ? color : 'var(--text-2)',
+                ...(showTools ? inkVars(color) : { color: 'var(--text-2)' }),
               }}
             >
               <Wrench size={10} />
@@ -1203,6 +1206,7 @@ export function ChatWindow({
               type="button"
               onClick={() => setShowMemory((v) => !v)}
               title={showMemory ? 'memory-inject banner on' : 'memory-inject banner off'}
+              className={showMemory ? 'agent-ink' : undefined}
               style={{
                 all: 'unset',
                 cursor: 'pointer',
@@ -1213,7 +1217,7 @@ export function ChatWindow({
                 borderRadius: 3,
                 background: showMemory ? `${color}25` : 'transparent',
                 border: showMemory ? `1px solid ${color}55` : '1px solid var(--line)',
-                color: showMemory ? color : 'var(--text-2)',
+                ...(showMemory ? inkVars(color) : { color: 'var(--text-2)' }),
               }}
             >
               <Brain size={10} />
@@ -1228,7 +1232,8 @@ export function ChatWindow({
                     ? 'voice auto-play on (mic input ⇒ spoken reply)'
                     : 'voice auto-play off (mic input ⇒ text only)'
                 }
-                style={{
+                className={autoPlay ? 'agent-ink' : undefined}
+              style={{
                   all: 'unset',
                   cursor: 'pointer',
                   display: 'inline-flex',
@@ -1238,7 +1243,7 @@ export function ChatWindow({
                   borderRadius: 3,
                   background: autoPlay ? `${color}25` : 'transparent',
                   border: autoPlay ? `1px solid ${color}55` : '1px solid var(--line)',
-                  color: autoPlay ? color : 'var(--text-2)',
+                  ...(autoPlay ? inkVars(color) : { color: 'var(--text-2)' }),
                 }}
               >
                 {autoPlay ? <Volume2 size={10} /> : <VolumeX size={10} />}

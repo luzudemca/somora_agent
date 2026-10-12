@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, type ReactNode } from 'react';
 import type { WindowState } from '../types/window';
 import { clampDragPosition, clampResizeSize, currentViewport } from '../lib/window-geometry';
+import { inkOnLight } from '../lib/colors';
 
 interface Props {
   win: WindowState;
@@ -62,6 +63,8 @@ export function Window({
   const tintStyle = agentColor
     ? ({
         '--agent-color': agentColor,
+        // Text in the agent's colour on the light theme (colors.ts).
+        '--agent-ink-light': inkOnLight(agentColor),
         '--agent-tint': `${agentColor}10`,
         '--agent-tint-strong': `${agentColor}1f`,
         '--agent-line': `${agentColor}30`,

@@ -24,6 +24,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Folder, FolderOpen, FolderX } from 'lucide-react';
 import { api, type ProjectInfo } from '../lib/api';
+import { inkVars } from '../lib/colors';
 
 interface Props {
   agent: string;
@@ -68,6 +69,7 @@ export function ProjectChip({ agent, session, project, onMutated }: Props) {
           // would clip the name to a single character. The ghost-button
           // (no-project state below) keeps the class because it's a
           // 28x28 square by design.
+          className={color.startsWith('#') ? 'agent-ink' : undefined}
           style={{
             all: 'unset',
             cursor: 'pointer',
@@ -77,7 +79,7 @@ export function ProjectChip({ agent, session, project, onMutated }: Props) {
             padding: '4px 8px',
             background: `${color}22`,
             border: `1px solid ${color}66`,
-            color,
+            ...(color.startsWith('#') ? inkVars(color) : { color }),
             borderRadius: 4,
             fontFamily: '"JetBrains Mono", monospace',
             fontSize: 10,

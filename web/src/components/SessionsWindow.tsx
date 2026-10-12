@@ -15,6 +15,7 @@ import { api, type GlobalSessionRow, type ProjectInfo } from '../lib/api';
 import { DreamPhaseIcon } from './DreamPhaseIcon';
 import { useChatContext } from './ChatProvider';
 import { useActivity } from './ActivityProvider';
+import { inkVars } from '../lib/colors';
 
 type TabKey = 'active' | 'archived' | 'all';
 type SortKey = 'lastActivity' | 'messageCount' | 'byteSize' | 'agent';
@@ -692,6 +693,7 @@ function ProjectCell({ slug, project }: { slug?: string; project?: ProjectInfo }
   const color = project.color ?? 'var(--text-2)';
   return (
     <span
+      className={typeof color === 'string' && color.startsWith('#') ? 'agent-ink' : undefined}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -700,7 +702,7 @@ function ProjectCell({ slug, project }: { slug?: string; project?: ProjectInfo }
         background: `${typeof color === 'string' && color.startsWith('#') ? `${color}22` : 'transparent'}`,
         border: `1px solid ${typeof color === 'string' && color.startsWith('#') ? `${color}55` : 'var(--line)'}`,
         borderRadius: 3,
-        color,
+        ...(typeof color === 'string' && color.startsWith('#') ? inkVars(color) : { color }),
         fontSize: 10,
       }}
       title={`entity: ${project.entity}${project.archived ? ' (archived)' : ''}`}

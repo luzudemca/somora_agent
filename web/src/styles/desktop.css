@@ -2250,3 +2250,14 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
   cursor: pointer;
 }
 .theme-switch button[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+
+/* Agent colours as text: as chosen on the dark theme, darkened to a
+ * readable contrast on the light one (colors.ts inkOnLight). */
+.agent-ink { color: var(--ink); }
+:root[data-theme='light'] .agent-ink { color: var(--ink-light, var(--ink)) !important; }
+:root[data-theme='light'] .chat-msg-tool b { color: var(--agent-ink-light, var(--accent)); }
+:root[data-theme='light'] .chat-msg-name { color: var(--agent-ink-light, var(--text-2)); }
+/* The tile gradient is laid out inside the border and repeated under
+ * it, so its dark end showed as a dark line along the top and left —
+ * invisible on dark, plain on light. Light only: dark stays as is. */
+:root[data-theme='light'] .agent-icon-glyph { background-origin: border-box !important; }

@@ -37,6 +37,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { SessionWorkResponse, WorkItemDto } from '../lib/api';
+import { inkVars } from '../lib/colors';
 import {
   formatElapsed,
   originGlyphLabel,
@@ -101,7 +102,7 @@ export function WorkBadge({ work, open, onToggle, color }: BadgeProps) {
     <button
       ref={ref}
       type="button"
-      className="work-badge"
+      className={`work-badge${open && color.startsWith('#') ? ' agent-ink' : ''}`}
       title="What this session is doing and what waits behind it"
       aria-haspopup="dialog"
       aria-expanded={open}
@@ -118,7 +119,7 @@ export function WorkBadge({ work, open, onToggle, color }: BadgeProps) {
         textTransform: 'uppercase',
         padding: '1px 6px',
         borderRadius: 3,
-        color: open ? color : 'var(--text-2)',
+        ...(open && color.startsWith('#') ? inkVars(color) : { color: open ? color : 'var(--text-2)' }),
         background: open ? `${color}25` : 'var(--bg-2)',
         border: open ? `1px solid ${color}55` : '1px solid var(--line-2)',
         whiteSpace: 'nowrap',
