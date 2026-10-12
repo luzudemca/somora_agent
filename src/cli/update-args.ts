@@ -54,16 +54,43 @@ export function compareVersions(a: string, b: string): number {
   return apre < bpre ? -1 : 1;
 }
 
-/** Dependencies that build or fetch a binary at install time. npm from
- *  11.16 on wants them named on a global install (`--allow-scripts`);
- *  today it only warns, a stricter default would leave node-pty and
- *  better-sqlite3 unbuilt. update-args.test.mts holds this list against
- *  package-lock.json and install.sh. */
-export const ALLOW_SCRIPTS = ['cpu-features', 'esbuild', 'fsevents', 'node-pty', 'onnxruntime-node', 'protobufjs', 'ssh2'];
+/** Packages with an install script: somora itself (its preinstall
+ *  refuses a too old glibc) and the dependencies that build or fetch a
+ *  binary. npm from 11.16 on wants them named on a global install
+ *  (`--allow-scripts`); npm 12 skips the ones not named. update-args.test.mts
+ *  holds this list against package.json, package-lock.json and install.sh. */
+export const ALLOW_SCRIPTS = ['cpu-features', 'esbuild', 'fsevents', 'node-pty', 'onnxruntime-node', 'protobufjs', 'somora', 'ssh2'];
 
 /** Extra arguments for `npm install -g`, given what `npm config get
  *  allow-scripts` printed: an npm that does not know the setting says
  *  "undefined" and must not get the flag. */
 export function allowScriptsArgs(configGetOutput: string): string[] {
   return configGetOutput.trim() === 'undefined' ? [] : [`--allow-scripts=${ALLOW_SCRIPTS.join(',')}`];
+}
+
+export interface NpmTarget { version: string; node?: string; glibc?: string; lastForOlderGlibc?: string }
+
+/** Read `npm view somora@<spec> version engines somora --json`. npm up
+ *  to 11 prints one object; npm 12 prints the same object inside a
+ *  one-element array. */
+export function parseNpmView(stdout: string): NpmTarget | null {
+  if (!stdout.trim()) return null;
+  try {
+    let parsed = JSON.parse(stdout) as unknown;
+    if (Array.isArray(parsed)) {
+      if (parsed.length !== 1) return null;
+      parsed = parsed[0];
+    }
+    if (!parsed || typeof parsed !== 'object') return null;
+    const j = parsed as { version?: unknown; engines?: { node?: unknown }; somora?: { glibc?: unknown; lastForOlderGlibc?: unknown } };
+    if (typeof j.version !== 'string') return null;
+    return {
+      version: j.version,
+      ...(typeof j.engines?.node === 'string' ? { node: j.engines.node } : {}),
+      ...(typeof j.somora?.glibc === 'string' ? { glibc: j.somora.glibc } : {}),
+      ...(typeof j.somora?.lastForOlderGlibc === 'string' ? { lastForOlderGlibc: j.somora.lastForOlderGlibc } : {}),
+    };
+  } catch {
+    return null;
+  }
 }

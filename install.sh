@@ -35,7 +35,7 @@ PROFILE_MARK="# added by the somora installer"
 # Dependencies that build or fetch a binary while installing. Newer npm
 # versions want them named before they may do that (kept in step with
 # src/cli/update-args.ts by a test).
-ALLOW_SCRIPTS="cpu-features,esbuild,fsevents,node-pty,onnxruntime-node,protobufjs,ssh2"
+ALLOW_SCRIPTS="cpu-features,esbuild,fsevents,node-pty,onnxruntime-node,protobufjs,somora,ssh2"
 
 VERSION="${SOMORA_VERSION:-latest}"
 YES="${SOMORA_YES:-}"

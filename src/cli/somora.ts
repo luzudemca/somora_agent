@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 
 import { SOMORA_VERSION } from '../version.ts';
 import { buildSystemdUnit, extractCustomEnvLines, nodePathLine } from './systemd-unit.ts';
-import { allowScriptsArgs, compareVersions, parseUpdateArgs } from './update-args.ts';
+import { allowScriptsArgs, compareVersions, parseNpmView, parseUpdateArgs, type NpmTarget } from './update-args.ts';
 import { parseYaml } from '../config/yaml.ts';
 import { callServer } from './server-call.ts';
 import { DEFAULT_UPDATE_ENDPOINT, readState, statusFrom, type UpdateCheckStatus } from '../server/update-check.ts';
@@ -490,25 +490,12 @@ Other:
 `;
 }
 
-interface NpmTarget { version: string; node?: string; glibc?: string; lastForOlderGlibc?: string }
-
 /** Ask the registry what `somora@<spec>` resolves to. `spec` is a
  *  dist-tag or an exact version. */
 function npmView(spec: string): NpmTarget | null {
   const r = run('npm', ['view', `${SOMORA_NPM_NAME}@${spec}`, 'version', 'engines', 'somora', '--json']);
-  if (r.code !== 0 || !r.stdout.trim()) return null;
-  try {
-    const j = JSON.parse(r.stdout) as { version?: string; engines?: { node?: string }; somora?: { glibc?: string; lastForOlderGlibc?: string } };
-    if (typeof j.version !== 'string') return null;
-    return {
-      version: j.version,
-      node: j.engines?.node,
-      ...(typeof j.somora?.glibc === 'string' ? { glibc: j.somora.glibc } : {}),
-      ...(typeof j.somora?.lastForOlderGlibc === 'string' ? { lastForOlderGlibc: j.somora.lastForOlderGlibc } : {}),
-    };
-  } catch {
-    return null;
-  }
+  if (r.code !== 0) return null;
+  return parseNpmView(r.stdout);
 }
 
 /** Resolve the freshly-installed global somora bin so reinit fires
