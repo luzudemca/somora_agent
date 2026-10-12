@@ -869,6 +869,9 @@ async function stepStart(ctx: Ctx): Promise<void> {
     if (!up) {
       warn('no background service on this system. Start somora in a terminal (or tmux):');
       say(`      ${cyan('somora server start --foreground')}`);
+      if (getIn(config, ['server', 'auth']) !== 'off') {
+        say(`    Then sign a browser in: ${cyan('somora key link')}${dim('  — a browser and the phone ask for the key once')}`);
+      }
       return;
     }
     if (ctx.needsRestart) warn('somora is running but was changed — restart it to apply the new settings');
