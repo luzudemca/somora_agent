@@ -44,23 +44,22 @@ models, your first agent, memory and HTTPS — details under
 
 ## See it
 
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/images/somora-web-light-2026-10-12.png" />
-  <img src="docs/images/somora-web-dark-2026-10-12.png" alt="somora web client: browser desktop with agent windows, two tmux terminals, the agent's browser, a builder plan and the taskbar" />
-</picture>
+<a href="docs/images/somora-web-dark-2026-10-12.png"><img src="docs/images/somora-web-dark-2026-10-12.png" alt="somora web client, dark theme: browser desktop with agent windows, two tmux terminals, the agent's browser, a builder plan and the taskbar" /></a>
+
+<a href="docs/images/somora-web-light-2026-10-12.png"><img src="docs/images/somora-web-light-2026-10-12.png" alt="somora web client, light theme: the same desktop" /></a>
 
 <table>
   <tr>
     <td width="66%" valign="top">
-      <img src="docs/images/somora-tui-2026-10-12.png" alt="somora TUI: the terminal client with its status line" />
+      <a href="docs/images/somora-tui-2026-10-12.png"><img src="docs/images/somora-tui-2026-10-12.png" alt="somora TUI: the terminal client with its status line" /></a>
     </td>
     <td width="34%" valign="top">
-      <img src="docs/images/somora-mobile-2026-10-12.png" alt="somora mobile app: avatar row at the top, an agent's reply, attachment, microphone and send at the bottom" />
+      <a href="docs/images/somora-mobile-2026-10-12.png"><img src="docs/images/somora-mobile-2026-10-12.png" alt="somora mobile app: avatar row at the top, an agent's reply, attachment, microphone and send at the bottom" /></a>
     </td>
   </tr>
 </table>
 
-Browser desktop (dark or light), terminal, and installable phone app — all talking to the
+Browser desktop in dark and light, terminal, and installable phone app — all talking to the
 same local server, the same agents, the same memory.
 
 ## Why somora
