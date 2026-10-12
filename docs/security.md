@@ -172,14 +172,14 @@ The browser tools are off by default (`browser.enabled`). When on, they
 block private networks unless a host or range is listed in
 `browser.allowPrivate`.
 
-### Pictures in agent replies
+### Pictures from other websites
 
-The web and mobile clients show a picture from somora itself at once:
-generated media, a file by its path, a `data:` image. A picture from
-another website waits for a click on **Show**. Loading it tells that
-website the address, and an agent talked into it by a page it read
-could put your data into that address. **Always show** brings back
-loading at once, in this browser.
+The chat in the web and mobile clients, the wiki window and the file
+viewer show a picture from somora itself at once: generated media, a
+file by its path, a `data:` image. A picture from another website waits
+for a click on **Show**. Loading it tells that website the address, and
+an agent talked into it by a page it read could put your data into that
+address. **Always show** brings back loading at once, in this browser.
 
 An SVG opened on its own, from any route, runs no scripts.
 

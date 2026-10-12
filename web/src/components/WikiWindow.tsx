@@ -22,6 +22,7 @@ import {
 } from '../lib/api';
 import { linkifyWikilinks } from '../lib/wikilinks';
 import { WikiGraph } from './WikiGraph';
+import { ChatImage } from './ChatImage';
 
 interface Props {
   /** Slug the window was last on; restored after a browser reload. */
@@ -146,6 +147,11 @@ function WikiWindowImpl({ slug, onSlugChange }: Props) {
     () => ({
       pre: ({ children }) => (
         <pre style={{ maxWidth: '100%', overflowX: 'auto' }}>{children}</pre>
+      ),
+      // Agents and dream runs write these pages: a picture from another
+      // website waits for a click, as in the chat.
+      img: ({ src, alt }) => (
+        <ChatImage src={typeof src === 'string' ? src : undefined} alt={typeof alt === 'string' ? alt : ''} maxHeight={480} />
       ),
       table: ({ children }) => (
         <div style={{ overflowX: 'auto' }}>
