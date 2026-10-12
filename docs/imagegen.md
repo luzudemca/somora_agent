@@ -93,7 +93,10 @@ The form is on the left, the gallery on the right, newest first.
 - **Buttons under the picture:** copy the path, reuse the settings,
   download, remove from the gallery.
 - **The gallery header** has a prompt search and shows the number of
-  items and their total size.
+  items and their total size, `60 of 362` while not all are loaded.
+- **The gallery loads 60 at a time.** Scroll to the end, or click
+  **Load more**, for the next 60. Reloading keeps what is shown; a new
+  search or filter starts again with the newest.
 
 The same window holds videos. A video plays in place and has its own
 button to open it in the file viewer.

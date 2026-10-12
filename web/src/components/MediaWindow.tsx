@@ -34,6 +34,9 @@ import {
 
 /** Order shown in the form. Matches how people describe an image:
  *  shape first, then how big, then how good. */
+/** Gallery items per page — the server default. */
+const MEDIA_PAGE = 60;
+
 const SPEC_FIELDS: Array<{ key: ImageSpecField; label: string; placeholder: string }> = [
   { key: 'aspect_ratio', label: 'Aspect ratio', placeholder: 'e.g. 16:9' },
   // Two vocabularies for the same thing, and which one a model speaks
@@ -123,14 +126,33 @@ export function MediaWindow() {
       .catch((err) => setError((err as Error).message));
   }, []);
 
-  const reload = useCallback(async (q: string) => {
+  // The gallery loads a page at a time; scrolling to the end (or "Load
+  // more") fetches the next. A refresh (new media, window focus, the
+  // reload button) keeps as many items as were already shown, so it
+  // does not throw you back to the first page.
+  const shownRef = useRef(0);
+  shownRef.current = images.length;
+  const queryRef = useRef(query);
+  queryRef.current = query;
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadingMoreRef = useRef(false);
+
+  const reload = useCallback(async (q: string, want = MEDIA_PAGE) => {
     try {
-      const res = await api.media({
-        ...(q ? { query: q } : {}),
-        ...(kindFilter !== 'all' ? { kind: kindFilter } : {}),
-        limit: 60,
-      });
-      setImages(res.items);
+      const items: MediaRecordDto[] = [];
+      let res: Awaited<ReturnType<typeof api.media>> | null = null;
+      while (items.length < want) {
+        res = await api.media({
+          ...(q ? { query: q } : {}),
+          ...(kindFilter !== 'all' ? { kind: kindFilter } : {}),
+          limit: Math.min(200, want - items.length),
+          offset: items.length,
+        });
+        items.push(...res.items);
+        if (res.items.length === 0 || items.length >= res.total) break;
+      }
+      if (!res) return;
+      setImages(items);
       setTotal(res.total);
       setTotalBytes(res.totalBytes);
     } catch (err) {
@@ -138,12 +160,41 @@ export function MediaWindow() {
     }
   }, [kindFilter]);
 
+  const loadMore = useCallback(async () => {
+    if (loadingMoreRef.current || shownRef.current >= total) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    try {
+      const q = queryRef.current;
+      const res = await api.media({
+        ...(q ? { query: q } : {}),
+        ...(kindFilter !== 'all' ? { kind: kindFilter } : {}),
+        limit: MEDIA_PAGE,
+        offset: shownRef.current,
+      });
+      // Media that arrived meanwhile shifts the offsets by a few: skip
+      // what is already shown rather than showing it twice.
+      setImages((cur) => {
+        const seen = new Set(cur.map((m) => m.id));
+        return [...cur, ...res.items.filter((m) => !seen.has(m.id))];
+      });
+      setTotal(res.total);
+      setTotalBytes(res.totalBytes);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [kindFilter, total]);
+
   useEffect(() => {
-    void reload('');
+    void reload(queryRef.current, Math.max(MEDIA_PAGE, shownRef.current));
   }, [reload, reloadTick]);
 
   // Debounced search — the gallery reads every record, and a request
-  // per keystroke would be wasteful for no gain in responsiveness.
+  // per keystroke would be wasteful for no gain in responsiveness. A
+  // new search or filter starts again at the first page.
   useEffect(() => {
     const t = setTimeout(() => void reload(query), 250);
     return () => clearTimeout(t);
@@ -744,11 +795,17 @@ export function MediaWindow() {
             <RefreshCw size={11} />
           </button>
           <span style={{ color: 'var(--text-2)', fontSize: 11, flex: 'none' }}>
-            {total} item{total === 1 ? '' : 's'} · {formatBytes(totalBytes)}
+            {images.length < total ? `${images.length} of ${total}` : total} item{total === 1 ? '' : 's'} · {formatBytes(totalBytes)}
           </span>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: 12, minHeight: 0 }}>
+        <div
+          style={{ flex: 1, overflowY: 'auto', padding: 12, minHeight: 0 }}
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            if (el.scrollHeight - el.scrollTop - el.clientHeight < 400) void loadMore();
+          }}
+        >
           {images.length === 0 ? (
             <div style={{ color: 'var(--text-2)', textAlign: 'center', paddingTop: 40 }}>
               <ImageIcon size={20} style={{ opacity: 0.5 }} />
@@ -829,6 +886,13 @@ export function MediaWindow() {
                   </span>
                 </button>
               ))}
+            </div>
+          )}
+          {images.length > 0 && images.length < total && (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '14px 0 4px' }}>
+              <button type="button" onClick={() => void loadMore()} disabled={loadingMore} style={smallBtnStyle}>
+                {loadingMore ? 'Loading…' : `Load more (${images.length} of ${total})`}
+              </button>
             </div>
           )}
         </div>
