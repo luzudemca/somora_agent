@@ -888,8 +888,17 @@ export const WebConfigSchema = z
         apiKey: z.string().min(1),
       })
       .optional(),
+    /**
+     * Private addresses web_fetch may reach. Loopback, LAN, link-local
+     * (cloud metadata) and the other internal ranges are refused, also
+     * when a name resolves to them; list a host (exact or `*.suffix`),
+     * an IP or an IPv4 CIDR here to let agents read it, for example
+     * `wiki.home.lan` or `10.0.0.0/24`. Same form as
+     * `browser.allowPrivate`.
+     */
+    fetchAllowPrivate: z.array(z.string().min(1)).default([]),
   })
-  .default({});
+  .default({ fetchAllowPrivate: [] });
 export type WebConfig = z.infer<typeof WebConfigSchema>;
 
 // TUI display preferences. Only affect what the Ink CLI renders into the
@@ -2415,8 +2424,17 @@ export const ConfigSchema = z.object({
        *   off       — nobody; cut turns are only marked.
        */
       resumeAfterRestart: z.enum(['requested', 'all', 'off']).default('requested'),
+      /**
+       * Extra names a browser may use to reach this server
+       * (src/server/browser-guard.ts). IP addresses, localhost, the
+       * machine's host name, `<host>.local`, *.ts.net and
+       * `tls.publicHost` are always accepted; add a DNS name of your own
+       * here, for example `somora.example.lan`. Programs that are not
+       * browsers are never checked.
+       */
+      allowedHosts: z.array(z.string().min(1)).default([]),
     })
-    .default({ host: '127.0.0.1', port: 18737, resumeAfterRestart: 'requested' }),
+    .default({ host: '127.0.0.1', port: 18737, resumeAfterRestart: 'requested', allowedHosts: [] }),
   providers: z.record(z.string().regex(/^[A-Za-z0-9_-]+$/), ProviderSchema),
   compaction: CompactionConfigSchema,
   memory: MemoryConfigSchema,

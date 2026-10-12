@@ -57,7 +57,7 @@ reading the server log and opening a shell (`WS /terminal/attach`).
 
 | Setup | Who can connect |
 |---|---|
-| Default, `server.host: 127.0.0.1` | Programs on the same machine. |
+| Default, `server.host: 127.0.0.1` | Programs on the same machine. Websites open in your browser are turned away (see below). |
 | `server.host: 0.0.0.0` | Every device that can reach the machine on port 18737. |
 
 The environment variable `SOMORA_HOST` overrides `server.host`.
@@ -65,6 +65,25 @@ The environment variable `SOMORA_HOST` overrides `server.host`.
 > **Warning:** Set `0.0.0.0` only on a network you trust end to end,
 > such as a Tailscale network. Never expose the port to the internet,
 > and do not put it behind a reverse proxy without authentication.
+
+### Websites in your browser
+
+Your browser can reach the port too, on behalf of any website you have
+open. Without a check, a page could open the terminal over a WebSocket,
+send an agent a task, or read answers through a name of its own that
+later points at your machine (DNS rebinding).
+
+So the server turns such requests away with `403`. A request from a
+browser passes when it was sent to one of this machine's names, and
+when the page that sent it is on one of them too. A link from another
+website still opens somora. Programs that are not browsers send no such
+marks and are never checked: the terminal client, the mobile app's
+requests, `curl`, scripts and the agents' own tools.
+
+This machine's names are any IP address, `localhost`, the host name and
+`<host>.local`, every `*.ts.net` name, `server.tls.publicHost`, and what
+you list under `server.allowedHosts`. Reach somora in the browser under
+a DNS name of your own, for example `somora.home.lan`? Add it there.
 
 ### HTTPS
 
@@ -78,7 +97,8 @@ connection. It does not add a login.
 show it. The log holds event names, tool names, file paths, shell
 commands, agent and session names. The route takes a day, never a path,
 so it cannot read other files. Treat the log as readable by everyone
-who can reach the port.
+who can reach the port. On disk, `~/.somora/logs/` is readable by your
+user only; somora tightens an older folder at the next start.
 
 ## What an agent can do on the host
 
@@ -139,10 +159,29 @@ tools only. The builder's shell can still write anywhere.
 ### Web and browser
 
 `web_fetch` refuses private and reserved addresses: loopback, private
-ranges, link-local and cloud metadata addresses. It checks again after a
-redirect. The browser tools are off by default (`browser.enabled`).
-When on, they block private networks unless a host or range is listed
-in `browser.allowPrivate`.
+ranges, link-local and cloud metadata addresses, also written as IPv6
+(`[::1]`, `[::ffff:7f00:1]`). A name is checked on the addresses it
+resolves to, at the moment of connecting, so `127.0.0.1.nip.io` or a
+name that changes its answer is refused too.
+
+Redirects are followed one hop at a time, each checked before anything
+is sent to it, at most five. To let agents read an internal page, list its host, IP or IPv4 range in
+`web.fetchAllowPrivate`.
+
+The browser tools are off by default (`browser.enabled`). When on, they
+block private networks unless a host or range is listed in
+`browser.allowPrivate`.
+
+### Pictures in agent replies
+
+The web and mobile clients show a picture from somora itself at once:
+generated media, a file by its path, a `data:` image. A picture from
+another website waits for a click on **Show**. Loading it tells that
+website the address, and an agent talked into it by a page it read
+could put your data into that address. **Always show** brings back
+loading at once, in this browser.
+
+An SVG opened on its own, from any route, runs no scripts.
 
 ### Memory tools
 
@@ -339,7 +378,8 @@ seconds and does not follow redirects. The last answer is stored in
 - **Several users.** somora assumes you are its only user. There are no
   accounts and no permissions between people.
 - **An open port.** Anyone who can reach the port has the same access
-  as you, including a shell.
+  as you, including a shell. The browser check above keeps websites
+  out, not programs or people on your network.
 
 ## Settings
 
@@ -355,6 +395,7 @@ server:
   #   key: ~/.somora/certs/<your-host>.<your-tailnet>.ts.net.key
   #   publicHost: <your-host>.<your-tailnet>.ts.net
   #   renew: tailscale
+  allowedHosts: []
 updateCheck:
   enabled: true
   endpoint: https://somora.ai/api/latest-version
@@ -367,6 +408,8 @@ agentLoop:
 browser:
   enabled: false
   allowPrivate: []
+web:
+  fetchAllowPrivate: []
 ```
 
 | Setting | Default | Meaning |
@@ -377,6 +420,7 @@ browser:
 | `server.tls.key` | none | Private key file (PEM). |
 | `server.tls.publicHost` | none | Host name clients use. Must match the certificate. |
 | `server.tls.renew` | none | `tailscale`: somora asks Tailscale for a fresh certificate before the old one runs out. |
+| `server.allowedHosts` | `[]` | More names a browser may use to reach somora. IP addresses, `localhost`, the host name, `*.ts.net` and `publicHost` always work. |
 | `updateCheck.enabled` | `true` | The daily update check. |
 | `updateCheck.endpoint` | `https://somora.ai/api/latest-version` | Where to ask. Point it at a mirror of your own. |
 | `claudeCli.sharedUserCredentials` | `true` | Keep the Claude login in sync with `~/.claude`. |
@@ -385,6 +429,7 @@ browser:
 | `agentLoop.toolCallTimeoutMs` | `30000` | Time limit of a fast tool call. |
 | `browser.enabled` | `false` | The browser tools. |
 | `browser.allowPrivate` | `[]` | Private hosts or ranges the browser may open. |
+| `web.fetchAllowPrivate` | `[]` | Private hosts, IPs or IPv4 ranges `web_fetch` may read. |
 | `resources.<name>.allowBlocked` | `[]` | Blocked shell commands this SSH resource may run anyway. |
 | `sendUserTag` (per provider) | `true` | Send the `user` string to an OpenAI compatible provider. |
 
@@ -417,9 +462,17 @@ Log lines that concern this page:
 | `server.bind_loopback_with_public_host` | `server.tls.publicHost` is set but the server listens on `127.0.0.1`, so other devices cannot connect. Set `server.host: 0.0.0.0`. |
 | `update.check_disabled` | The update check is off. The line names the reason. |
 | `update.check_failed` | The update check could not reach the endpoint. It is retried after an hour. |
+| `http.browser_refused` | A browser request was turned away, with the reason, the `origin` and the `host`. |
 
 **Other devices cannot connect.** The server listens on `127.0.0.1`.
 Set `server.host: 0.0.0.0` and restart.
+
+**The web client shows `refused: host '…' is not one of this server's
+names`.** You opened somora in the browser under a DNS name of your
+own. Add it to `server.allowedHosts` and restart.
+
+**An agent cannot read a page on your network.** `web_fetch` names the
+host and the address. List it in `web.fetchAllowPrivate` and restart.
 
 **A command is refused as blocked.** The result names the pattern that
 matched. On an SSH resource you can allow it with `allowBlocked`.

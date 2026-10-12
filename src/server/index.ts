@@ -4,6 +4,7 @@ import { watchBrowserSnapshots } from '../browser/change-stream.ts';
 import { serve, upgradeWebSocket } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono, type Context } from 'hono';
+import { checkBrowserRequest } from './browser-guard.ts';
 import { serializeSessionEvent } from './sse-serializer.ts';
 import { streamSSEH2Safe } from './sse-h2-safe.ts';
 import { destroySocketOf, installTransportLiveness, remoteOf, startSseHeartbeat } from './sse-liveness.ts';
@@ -666,6 +667,37 @@ app.use('*', async (c, next) => {
     status: c.res.status,
     ms: Date.now() - start,
   });
+});
+
+// Background requests a foreign website makes through the user's
+// browser are refused; programs that are not browsers are not checked.
+app.use('*', async (c, next) => {
+  const verdict = checkBrowserRequest(
+    {
+      method: c.req.method,
+      host: c.req.header('host') ?? new URL(c.req.url).host,
+      origin: c.req.header('origin'),
+      secFetchSite: c.req.header('sec-fetch-site'),
+      secFetchMode: c.req.header('sec-fetch-mode'),
+    },
+    { publicHost: config.server.tls?.publicHost, allowedHosts: config.server.allowedHosts },
+  );
+  if (!verdict.ok) {
+    logger.warn({ msg: 'http.browser_refused', method: c.req.method, path: c.req.path, reason: verdict.reason, origin: c.req.header('origin') ?? null, host: c.req.header('host') ?? null });
+    return c.text(`refused: ${verdict.reason}. A browser reaching somora under another name: add it to server.allowedHosts in config.yaml.\n`, 403);
+  }
+  await next();
+});
+
+// An SVG is a document that can carry scripts. Whatever route serves
+// one (media, /files/raw, the web client's icons), opened on its own it
+// renders without running them, so a crafted file cannot act on
+// somora's origin. <img> never runs SVG scripts anyway.
+app.use('*', async (c, next) => {
+  await next();
+  if ((c.res.headers.get('content-type') ?? '').toLowerCase().startsWith('image/svg+xml')) {
+    c.res.headers.set('content-security-policy', "sandbox; script-src 'none'; object-src 'none'");
+  }
 });
 
 app.get('/healthz', (c) => c.text('ok'));

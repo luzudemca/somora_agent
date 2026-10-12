@@ -35,6 +35,12 @@ server:
   #   all                 — also every other turn the restart cut
   #   off                 — nobody; cut turns are only marked
   # resumeAfterRestart: requested
+  # A browser request is only taken when it was sent to one of this
+  # machine's names (IP addresses, localhost, the host name, *.ts.net,
+  # tls.publicHost) — so a website you have open cannot use somora. Add
+  # a DNS name of your own you open somora under. Programs that are not
+  # browsers are never checked.
+  # allowedHosts: [somora.home.lan]
   # HTTPS (HTTP/2). `somora setup access` writes this block for Tailscale;
   # by hand see docs/setup.md → HTTPS. `renew: tailscale` lets the server
   # renew the certificate itself and load it without a restart.
@@ -882,6 +888,9 @@ providers:
 # web:
 #   brave:
 #     apiKey: "BSAxxx..."
+#   # Internal hosts web_fetch may read (host, *.suffix, IP or IPv4 CIDR);
+#   # everything private is refused otherwise.
+#   fetchAllowPrivate: [wiki.home.lan, 10.0.0.0/24]
 
 # Sentinel — proactive trigger runtime (time-based fires that wake
 # agents on a schedule, see docs/sentinel.md). Only knob today is how
