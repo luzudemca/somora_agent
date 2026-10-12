@@ -196,8 +196,9 @@ restart cannot loop.
 **Dark** is the default. **Light** gives the whole desktop light
 surfaces with a darker accent so text stays readable. **Auto** follows
 the system setting and switches along when it changes. The choice sits
-at the bottom of the screen menu and is kept per browser. Terminal and
-tmux windows stay dark in every theme. Agent colours stay as chosen;
+at the bottom of the screen menu and is kept per browser.
+
+Terminal and tmux windows stay dark in every theme. Agent colours stay as chosen;
 on Light, text in an agent's colour (its role, the tools and memory
 switches) is darkened just enough to stay readable, whatever colour
 the agent has.
