@@ -541,6 +541,10 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
 .taskbar-stat {
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  height: 36px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
   line-height: 1.2;
@@ -559,15 +563,15 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
   color: var(--text-0);
-  padding: 0 2px 0 12px;
+  padding: 0 4px 0 12px;
   border-left: 1px solid var(--line);
   margin-left: 4px;
   height: 36px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  align-items: flex-end;
-  text-align: right;
+  align-items: center;
+  text-align: center;
   line-height: 1.25;
   font-variant-numeric: tabular-nums;
 }
