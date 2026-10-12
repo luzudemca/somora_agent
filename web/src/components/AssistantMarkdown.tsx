@@ -10,19 +10,12 @@ import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { useFileViewOpener } from './FileViewContext';
+import { ChatImage, FILESYSTEM_PATH_RE } from './ChatImage';
 
 interface Props {
   content: string;
 }
 
-// Detect hrefs that look like absolute filesystem paths under common
-// system roots. Anything matching is treated as a candidate for the
-// FileView window; the server then enforces the actual file_read
-// policy (workspace + somora-home + sensible blocks). We intentionally
-// match on the path *prefix* family rather than the user's specific
-// home dir so this works for any user (homedir() resolves at runtime
-// server-side, not at web build time).
-const FILESYSTEM_PATH_RE = /^(~|\/(home|Users|var|opt|tmp|etc|mnt|root))(\/|$)/;
 
 // Module-level remark/rehype plugin arrays. ReactMarkdown re-runs its
 // processor when the prop reference changes — fresh inline `[remarkGfm]`
@@ -41,24 +34,12 @@ const STATIC_COMPONENTS = {
   pre: ({ children }) => (
     <pre style={{ maxWidth: '100%', overflowX: 'auto' }}>{children}</pre>
   ),
-  img: ({ src, alt }) => {
-    // `![…](/abs/path.png)` — agents reference generated files by their
-    // absolute path (same convention as FileView links). The browser
-    // cannot load a filesystem path, so route it through /files/raw,
-    // which applies the file_read policy (2026-09-05 report).
-    const raw = typeof src === 'string' ? src : undefined;
-    const url =
-      raw && FILESYSTEM_PATH_RE.test(raw) ? `/files/raw?path=${encodeURIComponent(raw)}` : raw;
-    return (
-      <a href={url} target="_blank" rel="noopener noreferrer">
-        <img
-          src={url}
-          alt={typeof alt === 'string' ? alt : ''}
-          style={{ maxWidth: '100%', maxHeight: 360, borderRadius: 6, cursor: 'pointer' }}
-        />
-      </a>
-    );
-  },
+  // `![…](/abs/path.png)` — agents reference generated files by their
+  // absolute path; ChatImage routes those through /files/raw and holds
+  // pictures from other websites until clicked.
+  img: ({ src, alt }) => (
+    <ChatImage src={typeof src === 'string' ? src : undefined} alt={typeof alt === 'string' ? alt : ''} maxHeight={360} />
+  ),
   table: ({ children }) => (
     <div className="chat-msg-table-scroll">
       <table>{children}</table>

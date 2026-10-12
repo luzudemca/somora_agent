@@ -453,3 +453,25 @@ body {
   color: #f8f4ff;
   box-shadow: 0 0 8px var(--dream-lucid-glow);
 }
+
+/* A picture from another website in an agent reply, held until clicked (ChatImage). */
+.chat-image-held {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px dashed currentColor;
+  border-radius: 6px;
+  opacity: 0.75;
+  font-size: 0.9em;
+}
+.chat-image-held button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 1px 8px;
+  cursor: pointer;
+}
