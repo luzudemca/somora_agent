@@ -100,6 +100,7 @@ export async function callOneShotLLM(args: OneShotArgs): Promise<string> {
   for (let i = 0; i < order.length; i++) {
     const model = order[i]!;
     const ref = modelRef(model);
+    const startedAt = Date.now();
     try {
       const text = await callOneShotOn({ ...args, workerModel: model });
       markModelAvailable(ref);
@@ -115,9 +116,18 @@ export async function callOneShotLLM(args: OneShotArgs): Promise<string> {
     } catch (err) {
       lastErr = err;
       const message = String((err as Error)?.message ?? err);
+      const next = order[i + 1];
+      // Our own time limit ran out (the engines report it as an abort):
+      // this model is slow on THIS input, not down — chat must not skip
+      // it. The next model in the chain gets the same input.
+      const timedOut = !args.signal?.aborted && Date.now() - startedAt >= args.timeoutMs * 0.98;
+      if (timedOut) {
+        if (!next) throw err;
+        logger.warn({ msg: 'dream.worker_timeout', ...args.logCtx, workerModel: ref, timeoutMs: args.timeoutMs, next: modelRef(next) });
+        continue;
+      }
       const outage = isAvailabilityError(err) && !args.signal?.aborted;
       if (outage) markModelUnavailable(ref, message);
-      const next = order[i + 1];
       if (!outage || !next) throw err;
       logger.warn({ msg: 'dream.worker_unavailable', ...args.logCtx, workerModel: ref, err: message.slice(0, 300), next: modelRef(next) });
     }

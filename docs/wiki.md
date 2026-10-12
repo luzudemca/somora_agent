@@ -418,6 +418,7 @@ wiki:
       minExistingBytes: 2000
     skipCacheDays: 30
     maxPageChars: 50000
+    callTimeoutMs: 300000          # one model call; past it the next backup
   lucid:
     enabled: true
     intervalDays: 7

@@ -10,7 +10,7 @@ import { modelUnavailable, resetModelAvailability } from '../engine/model-availa
 import { callOneShotLLM, oneShotAnsweredBy, oneShotOrder } from './deep-llm.ts';
 import { resolveDreamWorker } from './worker-model.ts';
 
-type Mode = 'ok' | '503' | '400';
+type Mode = 'ok' | '503' | '400' | 'slow';
 interface Fake { server: Server; port: number; hits: number; mode: Mode }
 
 async function fake(mode: Mode, text: string): Promise<Fake> {
@@ -19,6 +19,7 @@ async function fake(mode: Mode, text: string): Promise<Fake> {
     let body = '';
     req.on('data', (d) => { body += d; }).on('end', () => {
       f.hits++;
+      if (f.mode === 'slow') return; // never answers — the caller's time limit runs out
       if (f.mode === '503') { res.statusCode = 503; return res.end('{"error":{"message":"overloaded"}}'); }
       if (f.mode === '400') { res.statusCode = 400; res.setHeader('content-type', 'application/json'); return res.end('{"error":{"message":"bad request: unknown parameter"}}'); }
       res.setHeader('content-type', 'application/json');
@@ -122,4 +123,27 @@ test('no backup configured: behaviour as before — the error comes out', async 
   } finally {
     a.server.close(); resetModelAvailability();
   }
+});
+
+test('a worker that runs past the time limit hands the same input to the backup, and is not marked down', async () => {
+  resetModelAvailability();
+  const a = await fake('slow', 'never');
+  const b = await fake('ok', 'from b');
+  try {
+    const cfg = configFor({ a: a.port, b: b.port, c: 1 }, ['b']);
+    const { model } = resolveDreamWorker(cfg, 'deep');
+    const text = await callOneShotLLM({ workerModel: model!, systemPrompt: 's', userMessage: 'u', timeoutMs: 400, logCtx: { op: 'test' } });
+    assert.equal(text, 'from b');
+    assert.equal(modelUnavailable('pa/model-a'), null, 'slow on one input is not an outage — chat keeps using it');
+    assert.equal(b.hits, 1);
+  } finally {
+    a.server.closeAllConnections?.();
+    a.server.close();
+    b.server.close();
+  }
+});
+
+test('the Deep call limit is configurable and defaults to five minutes', () => {
+  assert.equal(ConfigSchema.parse({ providers: {} }).wiki.deep.callTimeoutMs, 300_000);
+  assert.equal(ConfigSchema.parse({ providers: {}, wiki: { deep: { callTimeoutMs: 600_000 } } }).wiki.deep.callTimeoutMs, 600_000);
 });

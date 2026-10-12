@@ -422,6 +422,11 @@ wiki:
   model that failed is skipped by all of them for
   `fallback.retryUnavailableMinutes` (default 60). A successful call
   clears the mark.
+- A call that runs past its time limit goes to the next backup with
+  the same note. That model is slow on this input, not down, so it is
+  not marked and chat keeps using it. For Deep the limit is
+  `wiki.deep.callTimeoutMs` (default 5 minutes); a worker that thinks
+  over a long page can need that long.
 - A backup name that is not a configured model stops the server at
   start, with the list of known models.
 
@@ -600,6 +605,7 @@ wiki:
       minExistingBytes: 2000
     skipCacheDays: 30
     maxPageChars: 50000
+    callTimeoutMs: 300000
   lucid:
     enabled: true
     intervalDays: 7
@@ -630,6 +636,7 @@ fallback:
 | `wiki.deep.mergeShrinkGuard.minExistingBytes` | 2000 | Pages below this size are not guarded. |
 | `wiki.deep.skipCacheDays` | 30 | A skipped, unchanged note is looked at again after this many days. `0` means never. |
 | `wiki.deep.maxPageChars` | 50000 | A page above this takes no more content and gets sub-pages. |
+| `wiki.deep.callTimeoutMs` | 300000 | Time limit of one model call (one note), in milliseconds. Past it the note goes to the next backup. |
 | `wiki.lucid.enabled` | true | Scheduled Lucid runs. |
 | `wiki.lucid.intervalDays` | 7 | Days between Lucid runs. |
 | `wiki.lucid.model` | none | The Lucid worker. Required. |

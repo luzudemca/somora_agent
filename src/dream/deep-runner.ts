@@ -182,7 +182,7 @@ export async function runDreamB(args: RunDreamBArgs): Promise<RunDreamBResult> {
             workerModel,
             dispatcher,
             wiki,
-            timeoutMs: 120_000,
+            timeoutMs: args.config.wiki.deep.callTimeoutMs,
             signal: args.signal,
             ...(thinking ? { thinking } : {}),
           });

@@ -1978,6 +1978,12 @@ export const WikiDeepConfigSchema = z
      *  Seiten sollten nie entstehen" — the migration had folded 97
      *  reports into one 100 KB page). */
     maxPageChars: z.number().int().min(5_000).default(50_000),
+    /** Time limit of one model call (one note). A model that thinks
+     *  about a long page can need several minutes; past the limit the
+     *  call is dropped and the next model in `fallback` gets the same
+     *  note. Until 2026.1013 this was a fixed 2 minutes, and the same
+     *  notes timed out on every run. */
+    callTimeoutMs: z.number().int().min(30_000).max(1_800_000).default(300_000),
   })
   .default({
     enabled: true,
@@ -1985,6 +1991,7 @@ export const WikiDeepConfigSchema = z
     mergeShrinkGuard: { enabled: true, minRatio: 0.5, minExistingBytes: 2000 },
     skipCacheDays: 30,
     maxPageChars: 50_000,
+    callTimeoutMs: 300_000,
   });
 
 export const WikiLucidConfigSchema = z
@@ -2097,7 +2104,8 @@ export const WikiConfigSchema = z
       intervalHours: 12,
       mergeShrinkGuard: { enabled: true, minRatio: 0.5, minExistingBytes: 2000 },
       skipCacheDays: 30,
-    maxPageChars: 50_000,
+      maxPageChars: 50_000,
+      callTimeoutMs: 300_000,
     },
     lucid: {
       enabled: true,
