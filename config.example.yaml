@@ -41,6 +41,11 @@ server:
   # a DNS name of your own you open somora under. Programs that are not
   # browsers are never checked.
   # allowedHosts: [somora.home.lan]
+  # The login key (~/.somora/server.key, made on first start; `somora key`
+  # prints it). on: every request needs it — programs send
+  # "Authorization: Bearer <key>", a browser signs in once
+  # (`somora key link`). off: no key, the network alone decides.
+  # auth: on
   # HTTPS (HTTP/2). `somora setup access` writes this block for Tailscale;
   # by hand see docs/setup.md → HTTPS. `renew: tailscale` lets the server
   # renew the certificate itself and load it without a restart.

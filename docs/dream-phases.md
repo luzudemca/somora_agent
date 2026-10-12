@@ -678,8 +678,8 @@ Lucid run although findings wait. For `rem` neither applies.
 `run-deep` and `run-lucid` answer 400 when `wiki.enabled` is false.
 
 ```bash
-curl -X POST http://127.0.0.1:18737/dream/run-deep  -d '{"wait":true}'
-curl -X POST http://127.0.0.1:18737/dream/run-lucid -d '{"wait":true}'
+curl -H "Authorization: Bearer $(somora key)" -X POST http://127.0.0.1:18737/dream/run-deep  -d '{"wait":true}'
+curl -H "Authorization: Bearer $(somora key)" -X POST http://127.0.0.1:18737/dream/run-lucid -d '{"wait":true}'
 ```
 
 ## Troubleshooting

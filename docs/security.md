@@ -3,11 +3,13 @@
 somora runs on your machine, under your user account, with the model
 logins you already have. This page says who can reach it, what an agent
 can do on the host, what each engine is kept away from, and where
-credentials live. In short: the network is the access boundary, and
-agents are trusted helpers with guard rails, not sandboxed programs.
+credentials live. In short: a key and the network decide who gets in,
+and agents are trusted helpers with guard rails, not sandboxed programs.
 
 ## What you get
 
+- **A key on every request.** Programs send it, a browser signs in
+  once. `server.auth: off` switches it off.
 - **Private by default.** The server listens on `127.0.0.1` only.
   Opening it to your network is one explicit setting.
 - **Only somora's tools.** The Claude, Codex and Grok engines run with
@@ -21,11 +23,12 @@ agents are trusted helpers with guard rails, not sandboxed programs.
 
 ## Check your setup
 
-Three things tell you where you stand.
+These commands tell you where you stand.
 
 ```bash
-# Where does the server listen? No output means the default, 127.0.0.1
-grep -A3 '^ *server:' ~/.somora/config.yaml
+# Where does the server listen, and is the key on? No output means the
+# defaults: 127.0.0.1, key on
+grep -A4 '^ *server:' ~/.somora/config.yaml
 
 # What the daily update check sends, and whether it is on
 somora telemetry show
@@ -51,20 +54,57 @@ and, where the CLI allows it, built-in tools out of the model's reach.
 
 ## Who can reach the server
 
-The API has no login, no token and no user accounts. Whoever can connect
-to the port can use every route. That includes chatting with agents,
-reading the server log and opening a shell (`WS /terminal/attach`).
+Two things decide it: the address the server listens on, and its key.
 
 | Setup | Who can connect |
 |---|---|
-| Default, `server.host: 127.0.0.1` | Programs on the same machine. Websites open in your browser are turned away (see below). |
-| `server.host: 0.0.0.0` | Every device that can reach the machine on port 18737. |
+| Default, `server.host: 127.0.0.1` | Programs on the same machine, with the key. Websites open in your browser are turned away (see below). |
+| `server.host: 0.0.0.0` | Every device that can reach the machine on port 18737, with the key. |
 
 The environment variable `SOMORA_HOST` overrides `server.host`.
 
 > **Warning:** Set `0.0.0.0` only on a network you trust end to end,
 > such as a Tailscale network. Never expose the port to the internet,
 > and do not put it behind a reverse proxy without authentication.
+
+### The key
+
+somora makes one key on its first start and keeps it in
+`~/.somora/server.key`, readable by your user only. It looks like
+`somora_` followed by 43 letters, digits, `-` and `_`. With
+`server.auth: on`, the default, every request needs it: from the same
+machine, over the network and over Tailscale alike. There are no user
+accounts. The key opens every route, including the shell
+(`WS /terminal/attach`).
+
+| Who | What it takes |
+|---|---|
+| Terminal client and `somora` commands on the server | Nothing. They read the key file. |
+| Agents, dream runs, triggers, the engines' somora tools | Nothing. somora hands the key to its own processes. |
+| A browser or phone | Once: paste the key, or open the link from `somora key link`. The browser keeps a cookie for a year. |
+| Scripts, `curl`, other programs | `-H "Authorization: Bearer <key>"`. On the server: `$(somora key)`. |
+| The terminal client on another machine | `SOMORA_KEY=<key>` in its environment. |
+
+Commands:
+
+| Command | What it does |
+|---|---|
+| `somora key` | Prints the key. |
+| `somora key link` | Prints a link that signs a browser in and a QR code for the phone. Opens the browser when the machine has a screen; `--no-open` does not. |
+| `somora key rotate` | Makes a new key. The running server switches within seconds. Every browser signs in again, and scripts need the new key. |
+
+The key never sits in an agent's shell environment, so `env` does not
+show it. A script an agent writes reads it with `somora key`.
+
+Ten wrong keys from one address within five minutes block that address
+for a minute. The server's own machine is never blocked.
+
+> **Warning:** Anyone with the key, or with a link from
+> `somora key link`, can use somora. Treat it like a password. Lost or
+> shared it? Run `somora key rotate`.
+
+`server.auth: off` makes the server ask for no key, as before the key
+existed. Then only the address it listens on decides who gets in.
 
 ### Websites in your browser
 
@@ -132,8 +172,9 @@ override.
 
 The shell inherits the server's environment, including what
 `~/.somora/somora.env` loaded. somora's internal variables, such as
-`CLAUDE_CONFIG_DIR` and `NODE_ENV`, are removed unless the agent passes
-`inherit_agent_env: true`.
+`CLAUDE_CONFIG_DIR`, `NODE_ENV` and the key `SOMORA_KEY`, are removed
+unless the agent passes `inherit_agent_env: true`. A script that calls
+somora's API takes the key from `somora key`.
 
 ### Files
 
@@ -377,9 +418,9 @@ seconds and does not follow redirects. The last answer is stored in
   sandbox option.
 - **Several users.** somora assumes you are its only user. There are no
   accounts and no permissions between people.
-- **An open port.** Anyone who can reach the port has the same access
-  as you, including a shell. The browser check above keeps websites
-  out, not programs or people on your network.
+- **A leaked key.** Anyone who has the key and reaches the port has the
+  same access as you, including a shell. `somora key rotate` locks them
+  out. With `server.auth: off`, reaching the port is enough.
 
 ## Settings
 
@@ -396,6 +437,7 @@ server:
   #   publicHost: <your-host>.<your-tailnet>.ts.net
   #   renew: tailscale
   allowedHosts: []
+  auth: on
 updateCheck:
   enabled: true
   endpoint: https://somora.ai/api/latest-version
@@ -420,6 +462,7 @@ web:
 | `server.tls.key` | none | Private key file (PEM). |
 | `server.tls.publicHost` | none | Host name clients use. Must match the certificate. |
 | `server.tls.renew` | none | `tailscale`: somora asks Tailscale for a fresh certificate before the old one runs out. |
+| `server.auth` | `on` | `on`: every request needs the key in `~/.somora/server.key`. `off`: no key, the network alone decides. |
 | `server.allowedHosts` | `[]` | More names a browser may use to reach somora. IP addresses, `localhost`, the host name, `*.ts.net` and `publicHost` always work. |
 | `updateCheck.enabled` | `true` | The daily update check. |
 | `updateCheck.endpoint` | `https://somora.ai/api/latest-version` | Where to ask. Point it at a mirror of your own. |
@@ -462,10 +505,25 @@ Log lines that concern this page:
 | `server.bind_loopback_with_public_host` | `server.tls.publicHost` is set but the server listens on `127.0.0.1`, so other devices cannot connect. Set `server.host: 0.0.0.0`. |
 | `update.check_disabled` | The update check is off. The line names the reason. |
 | `update.check_failed` | The update check could not reach the endpoint. It is retried after an hour. |
+| `auth.refused` | A request without the right key, with address, path and whether a key was sent at all (never the key). Once a minute per address and path. |
+| `auth.login` / `auth.login_refused` | A browser signed in, or tried with a wrong key. |
 | `http.browser_refused` | A browser request was turned away, with the reason, the `origin` and the `host`. |
 
 **Other devices cannot connect.** The server listens on `127.0.0.1`.
 Set `server.host: 0.0.0.0` and restart.
+
+**A script or program gets `401 somora needs its key`.** Send
+`-H "Authorization: Bearer <key>"`; on the server `somora key` prints
+it. To go back to no key at all: `server.auth: off` and restart.
+
+**The browser or phone asks for the key.** Paste what `somora key`
+prints, or open the link from `somora key link`. A phone app that stays
+on an error screen after an update: close it and open it again.
+
+**The key is lost or was shared.** `somora key rotate` makes a new one.
+
+**`429 too many wrong keys`.** Ten wrong keys came from this address.
+Wait a minute and use the right one.
 
 **The web client shows `refused: host '…' is not one of this server's
 names`.** You opened somora in the browser under a DNS name of your

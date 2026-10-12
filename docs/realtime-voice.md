@@ -193,7 +193,7 @@ agents that can be called.
 The same over HTTP:
 
 ```bash
-curl -s "http://127.0.0.1:18737/voice/instructions?agent=<your-agent>" | jq .
+curl -H "Authorization: Bearer $(somora key)" -s "http://127.0.0.1:18737/voice/instructions?agent=<your-agent>" | jq .
 ```
 
 ## The call window

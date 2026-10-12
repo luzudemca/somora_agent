@@ -7,12 +7,13 @@ import { useBrowsers } from './BrowserProvider';
 // terminate.
 
 import { useEffect, useRef, useState } from 'react';
-import { Grid3x3, Maximize, Minimize, Pin, Power, RefreshCw, Settings, Sparkles } from 'lucide-react';
+import { Grid3x3, LogOut, Maximize, Minimize, Pin, Power, RefreshCw, Settings, Sparkles } from 'lucide-react';
 import { Koala } from './Koala';
 import type { WindowState } from '../types/window';
 import { api, type AgentInfo } from '../lib/api';
 import { resolveAgentColor } from '../lib/colors';
 import { sessionSlug } from '../lib/session-label';
+import { signOut } from './KeyGate';
 
 interface Props {
   onOpenBrowsers?: () => void;
@@ -375,6 +376,16 @@ export function Taskbar({
               >
                 <Power size={13} />
                 <span>Restart somora</span>
+              </button>
+              <button
+                className="taskbar-menu-item"
+                type="button"
+                role="menuitem"
+                onClick={() => void signOut()}
+                title="Forget the key in this browser; it asks for it again"
+              >
+                <LogOut size={13} />
+                <span>Sign out</span>
               </button>
               <div className="taskbar-menu-meta">
                 {version ? `v${version}` : ''}

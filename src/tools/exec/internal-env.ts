@@ -43,6 +43,10 @@ export const SOMORA_INTERNAL_ENV_NAMES: readonly string[] = [
   'CLAUDE_CODE_ENTRYPOINT',
   'CLAUDE_CODE_SESSION_ID',
   'NoDefaultCurrentDirectoryInExePath',
+  // the login key: somora's own children need it, an agent's shell does
+  // not — `env` while debugging would put it into the transcript and on
+  // to the model provider. A script reads it on purpose: `somora key`.
+  'SOMORA_KEY',
 ];
 
 /** Name prefixes stripped — the Claude Code messaging bridge uses a

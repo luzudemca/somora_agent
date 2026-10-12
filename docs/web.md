@@ -34,9 +34,20 @@ newer.
 To reach it from other devices, set `server.host: 0.0.0.0` in
 `~/.somora/config.yaml` and restart.
 
-> **Warning:** There is no login. Anyone who can reach the port can use
-> every agent. Keep the server on your tailnet or LAN, never on the
-> public internet.
+### Sign in
+
+The first time a browser opens somora, it asks for the server's key.
+Paste what `somora key` prints on the server, or run `somora key link`
+there and open the link it prints. The link signs the browser in at
+once and drops the key from the address bar.
+
+The browser then keeps a cookie for a year. It asks again after
+**Sign out** in the gear menu, after `somora key rotate`, or when you
+clear the site's data. With `server.auth: off` there is no key page.
+
+> **Warning:** Whoever has the key can use every agent. Keep the server
+> on your tailnet or LAN, never on the public internet. The security
+> page explains the key.
 
 > **Note:** Use HTTPS as soon as you open more than a few windows. Over
 > plain HTTP a browser allows six connections per server, and every chat
@@ -155,6 +166,7 @@ order, so arranging twice changes nothing.
 |---|---|
 | **Reload config** | Reads `config.yaml` again and applies it without a restart. A message lists the changed sections and says which of them need a restart. A file with an error is rejected and the running config stays. |
 | **Restart somora** | Restarts the service after a confirmation. All streams drop for a few seconds. The page waits for the server and reloads itself. |
+| **Sign out** | Forgets the key in this browser. The key page appears again. The key itself stays valid. |
 
 The entry reads `changed on disk` when the file is newer than what the
 server loaded. Restart is greyed out when somora does not run as a

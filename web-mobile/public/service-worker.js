@@ -19,7 +19,7 @@
 // Versioning: bump CACHE_NAME on every change so old service-workers
 // shed their stale shells on activate.
 
-const CACHE_NAME = 'somora-mobile-v1';
+const CACHE_NAME = 'somora-mobile-v2'; // v2: the login key page (2026.1013)
 const APP_SHELL = ['/mobile/', '/mobile/index.html'];
 
 self.addEventListener('install', (event) => {

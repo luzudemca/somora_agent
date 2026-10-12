@@ -11,6 +11,7 @@
 // src/setup/config-edit.ts: comments survive, the old file is kept as a
 // backup, and a result the server would refuse is never written.
 
+import { ensureKeyFile } from '../server/auth-key.ts';
 import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir, networkInterfaces, userInfo } from 'node:os';
 import { request as httpRequest } from 'node:http';
@@ -134,6 +135,8 @@ function localRequest(config: YamlFile, path: string, opts: { body?: unknown; ti
     headers: {
       ...(tls?.publicHost ? { Host: `${tls.publicHost}:${serverPort(config)}` } : {}),
       ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } : {}),
+      // The server's login key; made here if the server never ran yet.
+      Authorization: `Bearer ${ensureKeyFile().key}`,
     },
     ...(tls?.publicHost ? { servername: tls.publicHost } : {}),
   };
@@ -923,10 +926,17 @@ async function stepStart(ctx: Ctx): Promise<void> {
   heading('Ready');
   say(`  Web client     ${cyan(`${base}/web/`)}`);
   say(`  Phone          ${cyan(`${base}/mobile`)}${base.startsWith('https') ? dim('  (add to home screen)') : ''}`);
+  say(`  Sign in        ${cyan('somora key link')}${dim('  — a browser and the phone ask for the key once')}`);
   say(`  Terminal       ${cyan('somora tui')}`);
   say(`  Update         ${cyan('somora update')}`);
   say(`  This assistant ${cyan('somora setup')}${dim('  — or one step: somora setup access')}`);
   say();
+  // Sign the browser in right away: the link carries the key.
+  if (getIn(config, ['server', 'auth']) !== 'off') {
+    const { runKeyCli } = await import('./key.ts');
+    await runKeyCli(['link']);
+    say();
+  }
 }
 
 // ─── entry ────────────────────────────────────────────────────────────

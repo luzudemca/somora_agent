@@ -88,6 +88,12 @@ function localAddresses(opts: GuardOptions): readonly string[] {
   return cachedAddresses.list;
 }
 
+/** An address of this machine: loopback or one of its interfaces. */
+export function isThisMachine(ip: string, opts: GuardOptions = {}): boolean {
+  const h = bareHost(ip).replace(/^::ffff:/, '');
+  return h.startsWith('127.') || h === '::1' || localAddresses(opts).includes(h);
+}
+
 /** The page a request comes from is somora itself. */
 export function isOwnOrigin(originHost: string, requestHost: string | undefined, opts: GuardOptions): boolean {
   if (requestHost && originHost.toLowerCase() === requestHost.toLowerCase()) return true;

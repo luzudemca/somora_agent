@@ -383,16 +383,16 @@ Ask the index directly. Replace `<name>` with the agent.
 
 ```bash
 # How many notes are indexed for this agent, across all sources
-curl 'http://127.0.0.1:18737/agents/<name>/memory/notes' | jq '.count'
+curl -H "Authorization: Bearer $(somora key)" 'http://127.0.0.1:18737/agents/<name>/memory/notes' | jq '.count'
 
 # State of the shared vault and wiki index: building | ready
-curl 'http://127.0.0.1:18737/health' | jq '.sharedIndex'
+curl -H "Authorization: Bearer $(somora key)" 'http://127.0.0.1:18737/health' | jq '.sharedIndex'
 
 # Is the embedding model loaded? "failed" means words-only search
-curl 'http://127.0.0.1:18737/health' | jq '.memoryEmbedder'
+curl -H "Authorization: Bearer $(somora key)" 'http://127.0.0.1:18737/health' | jq '.memoryEmbedder'
 
 # What a search returns, with the score of each of the two searches
-curl 'http://127.0.0.1:18737/agents/<name>/memory/search?q=garden&minScore=0' \
+curl -H "Authorization: Bearer $(somora key)" 'http://127.0.0.1:18737/agents/<name>/memory/search?q=garden&minScore=0' \
   | jq '.hits[] | {source, slug, score, vecScore, bm25Score, text: .text[0:80]}'
 ```
 

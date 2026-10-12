@@ -75,6 +75,8 @@ Usage:
                                      (run \`somora skill\` for sub-help)
   somora auth login|status|sync      Claude subscription login (bundled Claude Code) / inspect / reconcile
                                      the two credential stores
+  somora key [show|link|rotate]      the login key: print it, a link + QR code that
+                                     signs a browser in, or a new key
   somora codex [args...]             run the bundled Codex CLI (e.g. \`somora codex login\`,
                                      \`somora codex debug models\`); somora mirrors the login
   somora grok [args...]              run the bundled Grok CLI (e.g. \`somora grok login\`); somora
@@ -702,6 +704,10 @@ async function main(): Promise<number> {
     case 'auth': {
       const { runAuthCli } = await import('./auth.ts');
       return runAuthCli(rest);
+    }
+    case 'key': {
+      const { runKeyCli } = await import('./key.ts');
+      return await runKeyCli(rest);
     }
     case 'update':
       return await cmdUpdate(rest);

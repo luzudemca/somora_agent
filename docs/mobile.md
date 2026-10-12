@@ -44,6 +44,11 @@ https://<your-host>.<your-tailnet>.ts.net:18737/mobile/
 The somora koala appears on the home screen. The app opens full screen,
 without the browser's bars.
 
+The first time, the app asks for the server's key. On the server, run
+`somora key link` and scan the QR code with the phone's camera: the
+link signs the app in. Or paste what `somora key` prints. The phone
+remembers it for a year.
+
 ## The screen
 
 | Part | What it does |
@@ -243,10 +248,11 @@ Settings the phone depends on elsewhere:
 
 ## Security
 
-The phone app has no login screen. It works only while the phone is on
-the same Tailscale network as the server, and Tailscale is the access
-boundary. Your model logins stay on the server. The phone only talks to
-the somora API.
+The app needs the server's key once and keeps it as a cookie. It also
+works only while the phone is on the same Tailscale network as the
+server. Your model logins stay on the server. The phone only talks to
+the somora API. After `somora key rotate` the app asks for the key
+again.
 
 ## Troubleshooting
 
@@ -260,6 +266,10 @@ phone. From a laptop on the same network this must answer `ok`:
 ```bash
 curl -k https://<your-host>.<your-tailnet>.ts.net:18737/healthz
 ```
+
+**The app asks for the key, or shows errors after an update.** An app
+that stayed open across the update still runs the old version. Close it
+fully and open it again, then sign in with the key.
 
 **The app shows an old version after an update.** Close the app fully
 and open it again. If it still looks old, do it a second time. As a last

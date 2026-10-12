@@ -311,7 +311,8 @@ login in `~/.claude`, and a project's own `tsx` resolves path aliases
 against the project's tsconfig, not somora's.
 
 The agent's identity (`SOMORA_AGENT`, `SOMORA_SESSION`) and the server
-address variables stay, so skill scripts can still call somora.
+address variables stay, so skill scripts can still call somora. The key
+does not: a script sends `-H "Authorization: Bearer $(somora key)"`.
 
 `inherit_agent_env: true` on `create` passes the internal variables
 through. It is rarely needed:

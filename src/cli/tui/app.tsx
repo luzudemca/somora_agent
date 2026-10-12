@@ -16,6 +16,7 @@ import { THINKING_TAIL_LINES, tailLines } from './thinking-text.ts';
 import { nextId, summarize } from './format.ts';
 import { rememberAgent } from './state.ts';
 import { formatWorkCounters } from './work-queue.ts';
+import { loopbackFetch } from '../../server/loopback-fetch.ts';
 import { BANNER_COMPACT, BANNER_MOTTO, BANNER_TAGLINE, BANNER_TAGLINE_SHORT, BANNER_WIDE, bannerShape, isUtf8Locale } from '../banner.ts';
 import type {
   AgentInfo,
@@ -294,7 +295,7 @@ export function App({
     // every agent's state at once.
     void (async () => {
       try {
-        const res = await fetch(`${base}/sessions`);
+        const res = await loopbackFetch(`${base}/sessions`);
         if (!res.ok) return;
         const data = (await res.json()) as { sessions: Array<{ agent: string; sessionId: string; unreadAt?: string | null; seenAt?: string | null }> };
         if (cancelled) return;

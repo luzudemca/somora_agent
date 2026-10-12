@@ -1,5 +1,5 @@
-// somora-web entry. Phase 1 mounts the Desktop directly — no login
-// (LAN-only-by-design), no router (single-page desktop, all
+// somora-web entry. Mounts the Desktop directly behind KeyGate (main.tsx,
+// the login key) — no router (single-page desktop, all
 // navigation happens through the window manager). The ChatProvider
 // owns per-session SSE subscriptions + message state so multiple
 // chat windows for different agents can stream independently

@@ -7,6 +7,7 @@
 // a script — or an agent that read the docs — can drive them without a
 // keyboard. The real run needs the words "move my wiki", from a human.
 
+import { withKeyHeader } from '../server/auth-key.ts';
 import { cp, mkdir, readdir, rename, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -55,7 +56,7 @@ export function httpApi(base: string): Api {
   const call = async (method: string, path: string, body?: unknown): Promise<Record<string, unknown>> => {
     let res: Response;
     try {
-      res = await fetch(`${base}${path}`, { method, headers: { 'Content-Type': 'application/json' }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
+      res = await fetch(`${base}${path}`, { method, headers: withKeyHeader({ 'Content-Type': 'application/json' }), ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
     } catch (err) {
       throw new Error(`cannot reach ${base}: ${(err as Error).message} — is the server running? (somora server status)`);
     }

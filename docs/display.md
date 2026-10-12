@@ -304,6 +304,7 @@ By default the client talks to `http://127.0.0.1:18737`. When
 | `SOMORA_HOST` | The host name. |
 | `SOMORA_PORT` | The port. Default `18737`. |
 | `SOMORA_TLS` | `1` forces HTTPS, `0` forces HTTP. |
+| `SOMORA_KEY` | The server's key. On the server itself the client reads `~/.somora/server.key`; on another machine set this to what `somora key` prints there. |
 
 The agent you used last is remembered in `~/.somora/tui-state.json`.
 Without one, the client starts on the first agent in alphabetical

@@ -28,7 +28,7 @@ To see the system prompt exactly as the next turn sends it, open the
 agent's window in the web client and choose **Full prompt**, or call:
 
 ```bash
-curl 'http://127.0.0.1:18737/agents/<your-agent>/prompt-preview?session=main'
+curl -H "Authorization: Bearer $(somora key)" 'http://127.0.0.1:18737/agents/<your-agent>/prompt-preview?session=main'
 ```
 
 The preview never changes the session.

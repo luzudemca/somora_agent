@@ -15,8 +15,8 @@ every stream event, so you can write your own client from it.
   level, project, unread state.
 - **The machinery behind the agents**: memory search, wiki, dream
   phases, triggers, browser, media, voice.
-- **No login to implement.** Whoever reaches the port may use it. Read
-  "Access model" before you open that port to anyone.
+- **One key.** Send the server's key with every request. "Access
+  model" says how.
 
 ## First request
 
@@ -25,15 +25,16 @@ The reply arrives on the stream.
 
 ```bash
 BASE=https://<your-host>:18737
+KEY=$(somora key)        # on the server; elsewhere paste the key
 
 # 1. Who is there?
-curl $BASE/agents
+curl -H "Authorization: Bearer $KEY" $BASE/agents
 
 # 2. Follow the session (keep this running)
-curl -N "$BASE/chat/stream?agent=<your-agent>&session=main" &
+curl -H "Authorization: Bearer $KEY" -N "$BASE/chat/stream?agent=<your-agent>&session=main" &
 
 # 3. Send a message
-curl -X POST $BASE/chat/send \
+curl -H "Authorization: Bearer $KEY" -X POST $BASE/chat/send \
      -H 'Content-Type: application/json' \
      -d '{"agent":"<your-agent>","session":"main","text":"What is on today?"}'
 # → 202 { "ok": true, "turnId": "…" }
@@ -91,17 +92,71 @@ streams where they cover what you need.
 
 ## Access model
 
-There is no API key, no login and no per-route permission. The server
-trusts every request that reaches it. Access is decided by the network:
-bind to `127.0.0.1`, or to a private network such as a tailnet whose
-rules say who may connect.
+The server has one key, in `~/.somora/server.key`. Every request needs
+it, also from the same machine and over Tailscale. There are no user
+accounts and no per-route permissions: the key opens everything.
 
-> **Warning:** Never expose the port to the public internet. Anyone who
-> reaches it can read all memory and sessions and act as any agent.
+| Client | How it sends the key |
+|---|---|
+| A program | `Authorization: Bearer <key>`, or `X-Somora-Key: <key>` where a tool cannot set `Authorization`. |
+| A browser | A cookie from `POST /auth/login`. It rides along on every request, stream and WebSocket. |
+| A script an agent writes | `-H "Authorization: Bearer $(somora key)"`. The key is not in the shell's environment, so `env` never shows it. |
+
+`somora key` prints the key on the server. Never put it in a URL query:
+it would end up in logs and histories.
+
+Without the key, or with a wrong one, the server answers `401`:
+
+```json
+{ "error": "somora needs its key. Programs: send \"Authorization: Bearer <key>\"; on the server \"somora key\" prints it …", "kind": "auth" }
+```
+
+Ten wrong keys from one address within five minutes block that address
+for a minute (`429`). Requests from the server's own machine are not
+blocked. A request without any key does not count.
+
+Open without the key: `GET /healthz`, the `/auth/*` routes below, and
+the files of the web and mobile clients under `/web/` and `/mobile/`,
+which hold no data.
+
+With `server.auth: off` in `config.yaml` the server asks for no key.
+Then access is decided by the network alone.
+
+> **Warning:** Never expose the port to the public internet, with or
+> without the key. The key protects a private network, it is not built
+> to face the internet.
 
 The API can do what an agent can do: write memory, switch models, start
 dream runs, run tools. The security page describes the trust boundary
 and how to check your setup.
+
+### `GET /auth/status`
+
+Open without the key. Says whether the key is switched on and whether
+this request carries it.
+
+```json
+{ "auth": "on", "signedIn": false }
+```
+
+With `server.auth: off`, `signedIn` is always `true`.
+
+### `POST /auth/login`
+
+Open without the key. Signs a browser in. Body `{ "key": "somora_…" }`.
+
+| Status | Body |
+|---|---|
+| `200` | `{ "ok": true }`, plus the cookie `somora_key` (`HttpOnly`, `SameSite=Strict`, `Secure` over HTTPS, one year). |
+| `401` | `{ "error": "wrong key — …" }` |
+| `429` | Too many wrong keys from this address. |
+
+The cookie holds a value derived from the key, not the key. A new key
+(`somora key rotate`) signs every browser out.
+
+### `POST /auth/logout`
+
+Open without the key. Removes the cookie. Answers `{ "ok": true }`.
 
 ## Stability
 
@@ -136,7 +191,7 @@ The running version and what the daily update check found.
 ### `GET /healthz`
 
 Liveness probe. Answers the plain text `ok` with status 200. Use it to
-wait for the server to come up.
+wait for the server to come up. Open without the key.
 
 ### `GET /health`
 
@@ -342,7 +397,7 @@ An agent that restarts somora from its own turn would cut that turn
 off. The route therefore takes the requester in the body and waits.
 
 ```bash
-curl -X POST $BASE/server/restart \
+curl -H "Authorization: Bearer $KEY" -X POST $BASE/server/restart \
      -H 'Content-Type: application/json' \
      -d '{"agent":"<your-agent>","session":"main","reason":"config change"}'
 # → { "ok": true, "deferred": true, "via": "systemd", "message": "…" }
@@ -538,7 +593,7 @@ Stops the turn that is running on a session, whatever started it.
 Agent and session go in the query string.
 
 ```bash
-curl -X POST "$BASE/chat/abort?agent=<your-agent>&session=main"
+curl -H "Authorization: Bearer $KEY" -X POST "$BASE/chat/abort?agent=<your-agent>&session=main"
 ```
 
 | Query | Default | Meaning |
@@ -713,7 +768,7 @@ The live events of one session, as Server-Sent Events. Open one per
 chat window.
 
 ```bash
-curl -N "$BASE/chat/stream?agent=<your-agent>&session=main"
+curl -H "Authorization: Bearer $KEY" -N "$BASE/chat/stream?agent=<your-agent>&session=main"
 ```
 
 | Query | Default | Meaning |
@@ -893,7 +948,7 @@ have something unread. It also reports sessions that no client has
 open. Open one per client.
 
 ```bash
-curl -N $BASE/activity/stream
+curl -H "Authorization: Bearer $KEY" -N $BASE/activity/stream
 ```
 
 | Event | When | Data |
@@ -1081,8 +1136,8 @@ Downloads the session as a file.
 Both set `Content-Disposition: attachment`. `400` for another format.
 
 ```bash
-curl "$BASE/agents/<your-agent>/sessions/main/export?format=markdown" -o main.md
-curl "$BASE/agents/<your-agent>/sessions/main/export?format=json" -o main.jsonl
+curl -H "Authorization: Bearer $KEY" "$BASE/agents/<your-agent>/sessions/main/export?format=markdown" -o main.md
+curl -H "Authorization: Bearer $KEY" "$BASE/agents/<your-agent>/sessions/main/export?format=json" -o main.jsonl
 ```
 
 ## Models and thinking
@@ -1191,7 +1246,7 @@ Merges keys into the session's override. A key set to `null` is
 dropped.
 
 ```bash
-curl -X PUT $BASE/agents/<your-agent>/sessions/main/sampling \
+curl -H "Authorization: Bearer $KEY" -X PUT $BASE/agents/<your-agent>/sessions/main/sampling \
      -H 'Content-Type: application/json' -d '{"temperature":0.7}'
 ```
 
@@ -1351,7 +1406,7 @@ Runs one tool as the agent, without a chat turn. The body is the
 tool's input, the response its result.
 
 ```bash
-curl -X POST $BASE/agents/<your-agent>/tools/memory_search \
+curl -H "Authorization: Bearer $KEY" -X POST $BASE/agents/<your-agent>/tools/memory_search \
      -H 'Content-Type: application/json' \
      -d '{"query":"voice satellites","limit":3}'
 ```
@@ -1735,7 +1790,7 @@ keyword and by meaning. It is the search the `memory_search` tool uses.
 | `minScore` | 0 | 0 to 1. Hits below it are dropped. Recall during a turn uses `autoInject.minScore` instead. |
 
 ```bash
-curl "$BASE/agents/<your-agent>/memory/search?q=voice+satellites&limit=5"
+curl -H "Authorization: Bearer $KEY" "$BASE/agents/<your-agent>/memory/search?q=voice+satellites&limit=5"
 ```
 
 Returns `{agent, query, limit, minScore, count, hits}`. Each hit:
@@ -2174,7 +2229,7 @@ Uploads one file as the raw request body. The file name goes into the
 `X-Somora-Filename` header, URL-encoded.
 
 ```bash
-curl -X POST $BASE/attachments \
+curl -H "Authorization: Bearer $KEY" -X POST $BASE/attachments \
      --data-binary @./screenshot.png \
      -H "Content-Type: image/png" \
      -H "X-Somora-Filename: screenshot.png"
@@ -2649,7 +2704,7 @@ shell.
 The tmux sessions on the server.
 
 ```bash
-curl $BASE/tmux/sessions
+curl -H "Authorization: Bearer $KEY" $BASE/tmux/sessions
 ```
 
 Returns `{sessions: [{name, windows, activeCommand, activeTitle, createdEpoch, lastActivityEpoch, origin?}]}`.
@@ -2918,7 +2973,7 @@ There is no route to create a trigger. Create it through the tool, so
 that the same limits apply as for an agent:
 
 ```bash
-curl -X POST $BASE/agents/<your-agent>/tools/sentinel \
+curl -H "Authorization: Bearer $KEY" -X POST $BASE/agents/<your-agent>/tools/sentinel \
   -H 'Content-Type: application/json' \
   -d '{
     "action": "create",

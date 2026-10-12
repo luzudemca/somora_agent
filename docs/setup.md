@@ -88,7 +88,7 @@ somora setup access     # one step only
 | `memory` | Turns on REM per agent with a model and a backup model, offers the duplicate check for new notes, and sets up the shared wiki with Deep and Lucid, their model and a backup model. The wiki goes into a new folder or your Obsidian vault. |
 | `team` | With two or more agents and no team file yet: writes `team.yaml`. |
 | `access` | This machine only, the local network, or Tailscale HTTPS. For Tailscale it installs and connects it if needed, walks you through the one switch in the Tailscale admin page, fetches the certificate and turns on automatic renewal. |
-| `start` | Starts the service, or restarts it after asking. Waits until it answers, sends an agent a real test message and says which model replied. |
+| `start` | Starts the service, or restarts it after asking. Waits until it answers, sends an agent a real test message and says which model replied. Ends with the link that signs a browser in and a QR code for the phone. |
 
 Good to know:
 
@@ -129,6 +129,7 @@ somora init            # data folder and service definition
 somora server start    # start the service and enable it at boot
 somora setup           # models, first agent, memory, HTTPS
 somora tui             # chat in the terminal
+somora key link        # sign a browser in: link, and a QR code for the phone
 ```
 
 `ONNXRUNTIME_NODE_INSTALL=skip` leaves out a 300 MB CUDA library that
@@ -294,9 +295,10 @@ following for you.
 `publicHost` must match the name in the certificate. somora's own
 internal calls go through the same HTTPS listener and verify it.
 
-> **Warning:** somora has no login of its own. With `host: 0.0.0.0`
-> everyone who can reach the port can talk to your agents. Tailscale is
-> the access boundary. Do not open the port to the internet.
+> **Warning:** With `host: 0.0.0.0` every device on your tailnet can
+> reach the port. Each one needs somora's key to get in, over Tailscale
+> too: a browser signs in once with `somora key link`. Do not open the
+> port to the internet.
 
 ### Certificate renewal
 
@@ -729,6 +731,9 @@ in the agents guide.
 | `somora server restart` | Restarts the service. |
 | `somora server status` | Shows the running server, a waiting update and the service state. |
 | `somora tui` | Opens the terminal client against the running server. |
+| `somora key` | Prints the server's key. Every request needs it unless `server.auth: off`. |
+| `somora key link [--no-open]` | Prints a link that signs a browser in and a QR code for the phone, and opens the browser when the machine has a screen. |
+| `somora key rotate` | Makes a new key. Browsers sign in again, scripts need the new key. |
 | `somora update [<version>] [--edge] [--force] [--no-reinit]` | Installs a version from npm, refreshes the service and restarts it. |
 | `somora config check [file]` | Validates `config.yaml` (or another file) exactly as the server does. Exit code 0 valid, 1 invalid, 2 unreadable. |
 | `somora config path` | Prints the path of the config file. |
@@ -752,7 +757,7 @@ Useful routes for a quick check:
 
 | Route | Answer |
 |---|---|
-| `GET /healthz` | `ok` |
+| `GET /healthz` | `ok`, also without the key |
 | `GET /health` | State of the server, including `claudeAuth`. |
 | `GET /version` | Running version and, once known, the latest one. |
 | `GET /env` | The environment overrides in effect, each with an `isDefault` flag. Logged at start as `somora.env`. |
@@ -812,6 +817,7 @@ service's environment.
 | `SOMORA_HOME` | `~/.somora` | The data folder. |
 | `SOMORA_PORT` | `server.port` | Overrides the port. |
 | `SOMORA_HOST` | `server.host` | Overrides the listen address. Prefer the config. With HTTPS on, the server sets it to `server.tls.publicHost` for its own child processes. |
+| `SOMORA_KEY` | `~/.somora/server.key` | The key a client sends. Set it for the terminal client on another machine. The server sets it for its own child processes and keeps it out of agents' shells. |
 | `SOMORA_TLS` | unset | Set to `1` by the server when it serves HTTPS, for its child processes. Do not set it yourself. |
 | `SOMORA_LOG_LEVEL` | `info` | Log level. |
 | `SOMORA_ENV_FILE` | `~/.somora/somora.env` | Another env file to load at start. |
@@ -889,7 +895,7 @@ systemctl --user cat somora.service | grep ExecStart
 "$(npm root -g)"/somora/bin/somora.mjs init
 systemctl --user daemon-reload
 systemctl --user restart somora.service
-curl -ks https://<your-host>:18737/version
+curl -H "Authorization: Bearer $(somora key)" -ks https://<your-host>:18737/version
 ```
 
 Then reload the browser with Ctrl+Shift+R.

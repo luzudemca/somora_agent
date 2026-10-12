@@ -23,13 +23,13 @@ engine it runs on.
 List every tool the server has registered:
 
 ```bash
-curl http://127.0.0.1:18737/tools | jq '.count, .tools[].name'
+curl -H "Authorization: Bearer $(somora key)" http://127.0.0.1:18737/tools | jq '.count, .tools[].name'
 ```
 
 Run one without a model in the loop. Replace `<name>` with an agent:
 
 ```bash
-curl -X POST http://127.0.0.1:18737/agents/<name>/tools/time_now \
+curl -H "Authorization: Bearer $(somora key)" -X POST http://127.0.0.1:18737/agents/<name>/tools/time_now \
   -H 'content-type: application/json' -d '{}'
 ```
 

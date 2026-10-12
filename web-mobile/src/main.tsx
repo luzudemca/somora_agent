@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { KeyGate } from '../../web/src/components/KeyGate';
 import './styles.css';
 
 const root = document.getElementById('root');
@@ -24,6 +25,8 @@ if ('serviceWorker' in navigator) {
 
 ReactDOM.createRoot(root).render(
   <React.StrictMode>
-    <App />
+    <KeyGate>
+      <App />
+    </KeyGate>
   </React.StrictMode>,
 );

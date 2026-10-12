@@ -2433,8 +2433,15 @@ export const ConfigSchema = z.object({
        * browsers are never checked.
        */
       allowedHosts: z.array(z.string().min(1)).default([]),
+      /**
+       * `on`: every request needs the login key in ~/.somora/server.key
+       * (src/server/auth-key.ts) — programs send `Authorization: Bearer
+       * <key>`, browsers sign in once. `off`: anyone who reaches the port
+       * may use it, as before the key existed. The key file exists either way.
+       */
+      auth: z.enum(['on', 'off']).default('on'),
     })
-    .default({ host: '127.0.0.1', port: 18737, resumeAfterRestart: 'requested', allowedHosts: [] }),
+    .default({ host: '127.0.0.1', port: 18737, resumeAfterRestart: 'requested', allowedHosts: [], auth: 'on' }),
   providers: z.record(z.string().regex(/^[A-Za-z0-9_-]+$/), ProviderSchema),
   compaction: CompactionConfigSchema,
   memory: MemoryConfigSchema,

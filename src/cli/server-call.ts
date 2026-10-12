@@ -9,6 +9,7 @@ import { request as httpsRequest } from 'node:https';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parseYaml } from '../config/yaml.ts';
+import { clientKey } from '../server/auth-key.ts';
 
 function target(): { port: number; publicHost?: string } {
   const home = process.env.SOMORA_HOME ?? join(homedir(), '.somora');
@@ -41,6 +42,7 @@ export function callServer(path: string, opts: { body?: unknown; timeoutMs?: num
     method: payload ? 'POST' : 'GET',
     headers: {
       ...(publicHost ? { Host: `${publicHost}:${port}` } : {}),
+      ...(clientKey() ? { Authorization: `Bearer ${clientKey()}` } : {}),
       ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } : {}),
     },
     ...(publicHost ? { servername: publicHost } : {}),

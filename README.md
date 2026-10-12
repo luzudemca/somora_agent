@@ -283,6 +283,7 @@ somora grok login                         # SuperGrok or Premium subscription; t
 somora init                    # creates ~/.somora/ and registers the background service
 somora server start            # starts it (and from then on at boot / login)
 somora tui                     # the default agent is created on first run
+somora key link                # sign the web client in (link + QR code for the phone)
 ```
 
 Once you have more than one agent, `somora team init --principal "<your
@@ -362,10 +363,11 @@ Three first-party clients, all hitting the same local server:
 | Client | Launch | What you get |
 |---|---|---|
 | **TUI** | `somora tui` | Terminal multi-agent chat with full keyboard control, the session's queue (`/queue`), memory and tool detail toggles. |
-| **Web** | `https://<host>.<tailnet>.ts.net:18737/web/` | A browser desktop: one window per agent, drag-and-drop attachments and screenshots, tmux app and shell terminal, Wiki Explorer with link graph, Media gallery, Sessions browser, the agent's Chromium window, server log, Abilities matrix (which tools and skills each agent may use), Team and Agent windows, a queue badge per session (what runs, what waits, what is arriving — take back or stop from there), dictation and spoken replies, and a voice window for a live call. HTTPS required; LAN-trust, no auth. [docs/web.md](docs/web.md) |
-| **Mobile (PWA)** | `…:18737/mobile/`, then "Add to Home Screen" | The phone app: avatar row to switch agent, a sheet in the header to switch session and model or restore an archived session, the same queue sheet, voice input and spoken replies, photo/PDF attachments via the native picker. [docs/mobile.md](docs/mobile.md) |
+| **Web** | `https://<host>.<tailnet>.ts.net:18737/web/` | A browser desktop: one window per agent, drag-and-drop attachments and screenshots, tmux app and shell terminal, Wiki Explorer with link graph, Media gallery, Sessions browser, the agent's Chromium window, server log, Abilities matrix (which tools and skills each agent may use), Team and Agent windows, a queue badge per session (what runs, what waits, what is arriving — take back or stop from there), dictation and spoken replies, and a voice window for a live call. HTTPS required; sign in once with the server's key (`somora key link`). [docs/web.md](docs/web.md) |
+| **Mobile (PWA)** | `…:18737/mobile/`, then "Add to Home Screen" | The phone app: avatar row to switch agent, a sheet in the header to switch session and model or restore an archived session, the same queue sheet, voice input and spoken replies, photo/PDF attachments via the native picker. Signs in once by scanning the QR code from `somora key link`. [docs/mobile.md](docs/mobile.md) |
 
-Anything else can talk to the server the same way the clients do:
+Anything else can talk to the server the same way the clients do, with
+the server's key in an `Authorization: Bearer` header:
 [docs/api.md](docs/api.md) is the HTTP + SSE + WebSocket reference.
 
 ## Documentation

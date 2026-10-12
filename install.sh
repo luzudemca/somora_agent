@@ -470,6 +470,7 @@ finish() {
     if [ -n "$SERVICE_OK" ]; then somora server start >/dev/null 2>&1 || true; fi
     step "Installed"
     info "Next:  ${B}somora setup${RST}   — the guided assistant (models, first agent, memory, HTTPS)"
+    info "Then:  ${B}somora key link${RST}  — signs the browser and the phone in (the server asks for its key)"
   fi
   if [ -n "${PATH_CHANGED:-}" ]; then
     printf '\n    %sOpen a new terminal (or run: source ~/.profile) so the `somora` command is found.%s\n' "$YLW" "$RST"

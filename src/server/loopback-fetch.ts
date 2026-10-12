@@ -20,6 +20,7 @@
 // instead of the bare `fetch failed`.
 
 import { Agent, fetch as undiciFetch } from 'undici';
+import { readKeyFile, withKeyHeader } from './auth-key.ts';
 
 let dispatcher: Agent | undefined;
 
@@ -44,15 +45,27 @@ function getDispatcher(): Agent {
 }
 
 export async function loopbackFetch(url: string, init?: RequestInit): Promise<Response> {
+  // Every call to somora's own server carries the login key
+  // (SOMORA_KEY, else ~/.somora/server.key) unless the caller set one.
+  const headers = withKeyHeader(init?.headers);
   // undici's RequestInit accepts `dispatcher`; node's lib.dom types
   // don't expose it, so cast through.
-  const withDispatcher = { ...(init ?? {}), dispatcher: getDispatcher() } as Parameters<
-    typeof undiciFetch
-  >[1];
+  const send = (h: Record<string, string>) =>
+    undiciFetch(url, { ...(init ?? {}), headers: h, dispatcher: getDispatcher() } as Parameters<typeof undiciFetch>[1]);
+  const res = await send(headers);
+  // A long-lived child still holding the key from before
+  // `somora key rotate`: the file on this machine has the new one.
+  const sent = headers.authorization?.replace(/^Bearer\s+/i, '');
+  const fresh = readKeyFile();
+  const replayable = init?.body === undefined || init?.body === null || typeof init.body === 'string';
+  if (res.status === 401 && sent && fresh && fresh !== sent && replayable && !new Headers(init?.headers).has('authorization')) {
+    await res.body?.cancel().catch(() => {});
+    return (await send({ ...headers, authorization: `Bearer ${fresh}` })) as unknown as Response;
+  }
   // undici's Response is structurally compatible with the global one
   // for our usage (ok, status, text, json). Cast for the rest of the
   // codebase which expects DOM-typed Response.
-  return undiciFetch(url, withDispatcher) as unknown as Response;
+  return res as unknown as Response;
 }
 
 export type A2AErrorCategory =

@@ -51,7 +51,7 @@ with its own tools.
 4. **Check it**:
 
    ```bash
-   curl -sk https://localhost:18737/mcp/status
+   curl -H "Authorization: Bearer $(somora key)" -sk https://localhost:18737/mcp/status
    ```
 
    The server should be `connected` with a tool count. Its tools appear
@@ -277,7 +277,7 @@ If the server shows `needs-auth`, run `/design-login` again and then
 reconnect:
 
 ```bash
-curl -sk -X POST https://localhost:18737/mcp/servers/claude-design/reconnect
+curl -H "Authorization: Bearer $(somora key)" -sk -X POST https://localhost:18737/mcp/servers/claude-design/reconnect
 ```
 
 Without a reconnect the hub tries again by itself within 5 minutes.
@@ -385,8 +385,8 @@ All three answer `503` when no server is configured.
 | `POST /mcp/call` | Runs one tool without a model. Body: `{server, tool, args, timeoutMs}`, with `tool` as the server's own tool name. Answers `{isError, text, images}`, or `502` when the call fails. The proxies use this route. It is also handy for debugging. |
 
 ```bash
-curl -sk https://localhost:18737/mcp/status | jq
-curl -sk -X POST https://localhost:18737/mcp/servers/<name>/reconnect
+curl -H "Authorization: Bearer $(somora key)" -sk https://localhost:18737/mcp/status | jq
+curl -H "Authorization: Bearer $(somora key)" -sk -X POST https://localhost:18737/mcp/servers/<name>/reconnect
 ```
 
 The abilities window reads an agent's tool visibility with

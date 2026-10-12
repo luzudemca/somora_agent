@@ -441,10 +441,10 @@ checks the agent's browser ability.
 Taking over and handing back from the command line:
 
 ```bash
-curl -sk -X POST https://localhost:18737/browser/agent:<your-agent>@<your-agent>/control \
+curl -H "Authorization: Bearer $(somora key)" -sk -X POST https://localhost:18737/browser/agent:<your-agent>@<your-agent>/control \
   -H 'Content-Type: application/json' -d '{"mode":"human"}'
 # sign in, then:
-curl -sk -X POST https://localhost:18737/browser/agent:<your-agent>@<your-agent>/control \
+curl -H "Authorization: Bearer $(somora key)" -sk -X POST https://localhost:18737/browser/agent:<your-agent>@<your-agent>/control \
   -H 'Content-Type: application/json' -d '{"mode":"agent","handoffId":"<id>"}'
 ```
 
