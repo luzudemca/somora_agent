@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
@@ -16,7 +16,14 @@ const UNDER_NODE_TEST = Boolean(process.env.NODE_TEST_CONTEXT);
 const SOMORA_HOME =
   process.env.SOMORA_HOME ?? (UNDER_NODE_TEST ? mkdtempSync(join(tmpdir(), 'somora-test-log-')) : join(homedir(), '.somora'));
 const LOG_DIR = join(SOMORA_HOME, 'logs');
-mkdirSync(LOG_DIR, { recursive: true });
+mkdirSync(LOG_DIR, { recursive: true, mode: 0o700 });
+// The log holds commands, paths and message text: other users on the
+// machine keep out. Also tightens a folder an older version created.
+try {
+  chmodSync(LOG_DIR, 0o700);
+} catch {
+  /* not ours to change — logging still works */
+}
 
 const level = process.env.SOMORA_LOG_LEVEL ?? 'info';
 // Pretty lines on the terminal are for someone watching the SERVER in
