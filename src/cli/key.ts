@@ -99,6 +99,27 @@ async function qr(text: string): Promise<string> {
   return QRCode.toString(text, { type: 'terminal', small: true, errorCorrectionLevel: 'L' });
 }
 
+/** Said once, when an installation gets its key: on the first
+ *  `somora init` of a version with the key — which `somora update`
+ *  runs from the NEW version, so updaters from older releases see it. */
+export function newKeyNotice(): string | null {
+  if (serverInfo().auth === 'off') return null;
+  return (
+    '\n' +
+    '  ┌──────────────────────────────────────────────────────────────────┐\n' +
+    '  │ somora now asks for a key. Programs here (TUI, somora commands,  │\n' +
+    '  │ agents) use it on their own. Each browser and phone signs in     │\n' +
+    '  │ once — run in a terminal:                                        │\n' +
+    '  │                                                                  │\n' +
+    '  │     somora key link     a link to open, and a QR code to scan    │\n' +
+    '  │     somora key          the key, for scripts:                    │\n' +
+    '  │                         -H "Authorization: Bearer <key>"         │\n' +
+    '  │                                                                  │\n' +
+    '  │ Switch it off with  server.auth: off  in ~/.somora/config.yaml   │\n' +
+    '  └──────────────────────────────────────────────────────────────────┘\n'
+  );
+}
+
 export async function runKeyCli(args: string[]): Promise<number> {
   const [sub = 'show', ...rest] = args;
   if (sub === '--help' || sub === '-h' || sub === 'help') {

@@ -161,11 +161,42 @@ export function KeyGate({ children }: { children: ReactNode }) {
           </button>
         )}
         {error && <p style={{ ...muted, color: '#ff8a8a' }}>{error}</p>}
-        <p style={{ ...muted, fontSize: 12.5, marginTop: 14 }}>
-          On the machine somora runs on, <code>somora key</code> shows the key and <code>somora key link</code> gives a link and a QR
-          code for your phone.
-        </p>
+        <div style={{ width: '100%', marginTop: 18, textAlign: 'left' }}>
+          <p style={{ ...muted, fontSize: 13, margin: '0 0 8px' }}>Where to get it — in a terminal on the machine somora runs on:</p>
+          <ShellCommand command="somora key" what="shows the key to paste here" />
+          <ShellCommand command="somora key link" what="a link that signs this browser in, and a QR code for your phone" />
+        </div>
       </form>
+    </div>
+  );
+}
+
+/** A shell command in its own box, with a copy button. */
+function ShellCommand({ command, what }: { command: string; what: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={shellBox}>
+        <span style={{ color: '#5a6371', userSelect: 'none' }}>$</span>
+        <code style={{ flex: 1, color: '#e6ecf3' }}>{command}</code>
+        <button
+          type="button"
+          onClick={() => {
+            void navigator.clipboard?.writeText(command).then(
+              () => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              },
+              () => {},
+            );
+          }}
+          style={copyButton}
+          title="Copy the command"
+        >
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      <div style={{ ...muted, fontSize: 12.5, margin: '4px 2px 0' }}>{what}</div>
     </div>
   );
 }
@@ -195,6 +226,27 @@ const card: React.CSSProperties = {
   alignItems: 'center',
   textAlign: 'center',
   gap: 8,
+};
+const shellBox: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  padding: '9px 10px 9px 12px',
+  borderRadius: 8,
+  background: '#05080a',
+  border: '1px solid rgba(126,184,154,0.35)',
+  fontFamily: 'JetBrains Mono, ui-monospace, monospace',
+  fontSize: 14.5,
+};
+const copyButton: React.CSSProperties = {
+  padding: '3px 9px',
+  borderRadius: 6,
+  border: '1px solid rgba(255,255,255,0.18)',
+  background: 'transparent',
+  color: '#9aa4b2',
+  fontSize: 12,
+  cursor: 'pointer',
+  fontFamily: 'Inter, system-ui, sans-serif',
 };
 const muted: React.CSSProperties = { color: '#9aa4b2', fontSize: 14, lineHeight: 1.45, margin: '4px 0' };
 const input: React.CSSProperties = {

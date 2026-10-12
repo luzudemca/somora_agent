@@ -136,7 +136,20 @@ function isPidAlive(pid: number): boolean {
 
 // ─── init ───────────────────────────────────────────────────────────
 
-function cmdInit(): number {
+async function cmdInit(): Promise<number> {
+  // The login key, made here when this is the first version with it.
+  const { ensureKeyFile } = await import('../server/auth-key.ts');
+  const keyIsNew = ensureKeyFile().created;
+  const code = cmdInitService();
+  if (keyIsNew) {
+    const { newKeyNotice } = await import('./key.ts');
+    const notice = newKeyNotice();
+    if (notice) process.stdout.write(notice);
+  }
+  return code;
+}
+
+function cmdInitService(): number {
   const created: string[] = [];
   const kept: string[] = [];
 
@@ -692,7 +705,7 @@ async function main(): Promise<number> {
   const rest = argv.slice(1);
   switch (cmd) {
     case 'init':
-      return cmdInit();
+      return await cmdInit();
     case 'server':
       return await cmdServer(rest);
     case 'tui':

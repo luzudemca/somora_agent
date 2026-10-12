@@ -341,7 +341,8 @@ somora update 2026.930.1     # one specific version
    old, it names the last version that runs on your system.
 3. Installs it with `npm install -g somora@<version>`.
 4. Runs `somora init` from the new install, so the service points at
-   it.
+   it. The first time an installation gets its key, this step prints a
+   box: browsers and phones sign in once with `somora key link`.
 5. Restarts the service. When somora runs in the foreground, restart it
    yourself.
 
