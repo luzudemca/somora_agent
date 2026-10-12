@@ -18,6 +18,6 @@ Fixes go into the current release. Update with `somora update`.
 
 ## How somora is secured
 
-[docs/security.md](../docs/security.md) describes who can reach the
+[The security model](https://docs.somora.ai/security) describes who can reach the
 server, the login key, what an agent may do, and what somora sends to
 the internet.
