@@ -7,6 +7,10 @@
 // Until then this page stands in for the app; the app itself does not
 // load any data.
 //
+// Colours: the dark values are written in as fallbacks — the page
+// looks exactly as it always did, on the web and the phone. Only the
+// web's light theme sets the --kg-* tokens (tokens.css).
+//
 // Later refusals (a new key after `somora key rotate`, a cookie that
 // ran out) bring the page back: every same-origin response with 401
 // from the key check sends `somora:key-required`, and the status is
@@ -177,8 +181,8 @@ function ShellCommand({ command, what }: { command: string; what: string }) {
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={shellBox}>
-        <span style={{ color: '#5a6371', userSelect: 'none' }}>$</span>
-        <code style={{ flex: 1, color: '#e6ecf3' }}>{command}</code>
+        <span style={{ color: 'var(--kg-dim, #5a6371)', userSelect: 'none' }}>$</span>
+        <code style={{ flex: 1, color: 'var(--kg-text, #e6ecf3)' }}>{command}</code>
         <button
           type="button"
           onClick={() => {
@@ -212,8 +216,8 @@ const page: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  background: '#0a0f0c',
-  color: '#e6ecf3',
+  background: 'var(--kg-bg, #0a0f0c)',
+  color: 'var(--kg-text, #e6ecf3)',
   fontFamily: 'Inter, system-ui, sans-serif',
   padding: 16,
   boxSizing: 'border-box',
@@ -233,7 +237,7 @@ const shellBox: React.CSSProperties = {
   gap: 10,
   padding: '9px 10px 9px 12px',
   borderRadius: 8,
-  background: '#05080a',
+  background: 'var(--kg-shell, #05080a)',
   border: '1px solid rgba(126,184,154,0.35)',
   fontFamily: 'JetBrains Mono, ui-monospace, monospace',
   fontSize: 14.5,
@@ -241,21 +245,21 @@ const shellBox: React.CSSProperties = {
 const copyButton: React.CSSProperties = {
   padding: '3px 9px',
   borderRadius: 6,
-  border: '1px solid rgba(255,255,255,0.18)',
+  border: '1px solid var(--kg-line, rgba(255,255,255,0.18))',
   background: 'transparent',
-  color: '#9aa4b2',
+  color: 'var(--kg-muted, #9aa4b2)',
   fontSize: 12,
   cursor: 'pointer',
   fontFamily: 'Inter, system-ui, sans-serif',
 };
-const muted: React.CSSProperties = { color: '#9aa4b2', fontSize: 14, lineHeight: 1.45, margin: '4px 0' };
+const muted: React.CSSProperties = { color: 'var(--kg-muted, #9aa4b2)', fontSize: 14, lineHeight: 1.45, margin: '4px 0' };
 const input: React.CSSProperties = {
   width: '100%',
   boxSizing: 'border-box',
   padding: '10px 12px',
   borderRadius: 8,
-  border: '1px solid rgba(255,255,255,0.15)',
-  background: '#11171f',
+  border: '1px solid var(--kg-line, rgba(255,255,255,0.15))',
+  background: 'var(--kg-input, #11171f)',
   color: 'inherit',
   fontSize: 15,
   fontFamily: 'JetBrains Mono, ui-monospace, monospace',

@@ -148,7 +148,7 @@ The bar at the bottom always stays on top. From left to right:
 | Koala, name and version | The somora mascot and the server version. |
 | Inbox | Updates, messages from somora.ai and things that need you, with a count of what is new. See "Inbox". |
 | Gear | Server menu: reload config, restart, sign out. |
-| Screen | **Arrange windows**, **Save layout** and **Restore layout** (a snapshot of the layout, brought back later), **Full screen** where the browser can do it. |
+| Screen | **Arrange windows**, **Save layout** and **Restore layout** (a snapshot of the layout, brought back later), **Full screen** where the browser can do it, and the theme: **Dark**, **Light** or **Auto**. |
 | `Browser · N waiting for you` | Appears when an agent handed the shared browser to you. Opens the browser list. |
 | Window buttons | One per open window, in the agent's colour. Click to focus or bring back a minimized window. |
 | `cpu` and `mem` | Load and memory of the host, refreshed every 5 seconds. |
@@ -190,6 +190,14 @@ reading `⚙ system · restart`.
 Which sessions are woken is set by `server.resumeAfterRestart`. A
 session is not woken a third time within ten minutes, so a failing
 restart cannot loop.
+
+### Theme
+
+**Dark** is the default. **Light** gives the whole desktop light
+surfaces with a darker accent so text stays readable. **Auto** follows
+the system setting and switches along when it changes. The choice sits
+at the bottom of the screen menu and is kept per browser. Terminal and
+tmux windows stay dark in every theme, and agent colours stay the same.
 
 ### Inbox
 

@@ -221,7 +221,7 @@ body {
 .chat-msg-bubble th,
 .chat-msg-bubble td {
   padding: 0.35em 0.7em;
-  border-bottom: 1px solid var(--line-2, #2a394e);
+  border-bottom: 1px solid var(--line-2, var(--line-2));
   vertical-align: top;
   /* The bubble breaks anywhere so prose never overflows; inside a
    * table that splits words mid-syllable ("statu|s"). Wrap at spaces
@@ -232,15 +232,15 @@ body {
 .chat-msg-bubble th {
   font-weight: 600;
   color: var(--text-0, var(--text-1));
-  background: var(--bg-3, rgba(255, 255, 255, 0.05));
-  border-bottom: 1px solid var(--line-2, #2a394e);
+  background: var(--bg-3, rgba(var(--tint-rgb),  0.05));
+  border-bottom: 1px solid var(--line-2, var(--line-2));
   white-space: nowrap;
 }
 .chat-msg-bubble tbody tr:last-child td {
   border-bottom: none;
 }
 .chat-msg-bubble tbody tr:nth-child(even) td {
-  background: color-mix(in srgb, var(--bg-3, #18202c) 40%, transparent);
+  background: color-mix(in srgb, var(--bg-3, var(--bg-3)) 40%, transparent);
 }
 .chat-msg-bubble td > code,
 .chat-msg-bubble th > code {
@@ -376,7 +376,7 @@ body {
   transition: background 0.12s, color 0.12s;
 }
 .bubble-action-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--tint-rgb),  0.08);
   color: var(--text-0);
 }
 .bubble-action-btn.pin-btn.active {
@@ -407,12 +407,12 @@ body {
   0%, 100% {
     box-shadow: 0 6px 18px rgba(0,0,0,0.4),
                 0 0 0 1px var(--pulse-color, transparent),
-                inset 0 1px 0 rgba(255,255,255,0.08);
+                inset 0 1px 0 rgba(var(--tint-rgb), 0.08);
   }
   50% {
     box-shadow: 0 6px 18px rgba(0,0,0,0.4),
                 0 0 14px 3px var(--pulse-color, transparent),
-                inset 0 1px 0 rgba(255,255,255,0.08);
+                inset 0 1px 0 rgba(var(--tint-rgb), 0.08);
   }
 }
 .agent-icon-glyph.dream-active {

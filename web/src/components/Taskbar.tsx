@@ -15,6 +15,7 @@ import { resolveAgentColor } from '../lib/colors';
 import { sessionSlug } from '../lib/session-label';
 import { signOut } from './KeyGate';
 import { InboxMenu } from './InboxMenu';
+import { readTheme, setTheme, type ThemeChoice } from '../lib/theme';
 
 interface Props {
   onOpenBrowsers?: () => void;
@@ -57,6 +58,7 @@ export function Taskbar({
   const gearRef = useRef<HTMLDivElement | null>(null);
   // Screen menu: arrange, save, restore, full screen.
   const [screenOpen, setScreenOpen] = useState(false);
+  const [theme, setThemeState] = useState<ThemeChoice>(() => readTheme());
   const screenRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!screenOpen) return;
@@ -380,6 +382,23 @@ export function Taskbar({
                   <span>{isFullscreen ? 'Leave full screen' : 'Full screen'}</span>
                 </button>
               )}
+              <div className="theme-switch-label" style={{ marginTop: 6 }}>Theme</div>
+              <div className="theme-switch" role="group" aria-label="Theme">
+                {(['dark', 'light', 'auto'] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    aria-pressed={theme === t}
+                    title={t === 'auto' ? 'Follow the system setting' : undefined}
+                    onClick={() => {
+                      setTheme(t);
+                      setThemeState(t);
+                    }}
+                  >
+                    {t === 'dark' ? 'Dark' : t === 'light' ? 'Light' : 'Auto'}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>

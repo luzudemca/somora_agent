@@ -35,4 +35,64 @@
   --shadow-window:
     0 30px 80px -10px rgba(0, 0, 0, 0.7),
     0 10px 30px -10px rgba(0, 0, 0, 0.5);
+
+  /* The same colours as bare channels, for rgba(var(--x), alpha).
+   * --tint is what lightens a surface on hover or as a faint fill:
+   * white on the dark theme, black on the light one. */
+  --tint-rgb: 255, 255, 255;
+  --accent-rgb: 92, 242, 214;
+  --bg-0-rgb: 7, 9, 13;
+  --bg-1-rgb: 11, 15, 21;
+  /* Text on an accent-coloured surface. */
+  --on-accent: #0a1010;
+  /* No color-scheme here: the dark theme keeps the browser's own
+   * controls (file pickers, scrollbars) exactly as they always were. */
+}
+
+/* Light theme (web/src/lib/theme.ts sets data-theme on <html>).
+ * Dark stays the default; the screen menu switches. Terminals keep
+ * their own dark colours. */
+:root[data-theme='light'] {
+  --bg-0: #eef1f5;
+  --bg-1: #ffffff;
+  --bg-2: #f3f5f8;
+  --bg-3: #e7ebf0;
+
+  --line: #dbe1e8;
+  --line-2: #c5ced9;
+
+  --text-0: #131922;
+  --text-1: #3b4757;
+  --text-2: #64728a;
+  --text-3: #8a96a8;
+
+  --accent: #0b8f78;
+  --accent-dim: #6cc3b3;
+  --accent-glow: rgba(11, 143, 120, 0.16);
+
+  --warn: #b26b00;
+  --danger: #d33f3f;
+  --ok: #0b8f78;
+
+  --grid: rgba(11, 143, 120, 0.06);
+  --grid-strong: rgba(11, 143, 120, 0.11);
+  --shadow-window:
+    0 24px 60px -14px rgba(15, 23, 42, 0.28),
+    0 8px 22px -10px rgba(15, 23, 42, 0.18);
+
+  --tint-rgb: 0, 0, 0;
+  --accent-rgb: 11, 143, 120;
+  --bg-0-rgb: 238, 241, 245;
+  --bg-1-rgb: 255, 255, 255;
+  --on-accent: #ffffff;
+  color-scheme: light;
+
+  /* The key page (KeyGate.tsx) keeps its own dark colours unless set. */
+  --kg-bg: var(--bg-0);
+  --kg-text: var(--text-0);
+  --kg-muted: var(--text-2);
+  --kg-dim: var(--text-3);
+  --kg-input: var(--bg-1);
+  --kg-shell: var(--bg-1);
+  --kg-line: var(--line-2);
 }
