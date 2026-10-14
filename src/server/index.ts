@@ -235,6 +235,7 @@ import { reserveSpawnSlot, releaseSpawnSlot } from '../tools/agents/spawn.ts';
 import { readSessionJsonlRaw, renderSessionMarkdown } from './session-export.ts';
 import { codexReasoningEffort, resolveOpenAiReasoning } from '../engine/thinking-params.ts';
 import { registerInboxRoutes } from './routes/inbox.ts';
+import { registerHealthRoutes } from './routes/health.ts';
 
 type Subscriber = (e: SseEvent) => Promise<void>;
 interface StreamSub {
@@ -248,7 +249,7 @@ interface StreamSub {
    *  client a clean EOF and its auto-reconnect kicks in. */
   evict: () => void;
 }
-const streams = new Map<string, Set<StreamSub>>();
+export const streams = new Map<string, Set<StreamSub>>();
 
 /**
  * Compose the pubsub key from (agent, session). Every persona has a
@@ -259,7 +260,7 @@ const streams = new Map<string, Set<StreamSub>>();
  * in another agent's main stream because both subscribed to bare
  * "main".
  */
-function streamKey(agent: string, session: string): string {
+export function streamKey(agent: string, session: string): string {
   return `${agent}::${session}`;
 }
 
@@ -287,12 +288,12 @@ function subscribe(
 // `/health` endpoint surfaces "seconds since last engine activity" so
 // an operator can tell at a glance whether a session is silently
 // wedged. Cheap: a single Map.set per published event.
-const lastEngineEventAt = new Map<string, number>();
+export const lastEngineEventAt = new Map<string, number>();
 // Last successful publish (at least one subscriber acknowledged, OR no
 // subscribers at all). Distinct from lastEngineEventAt which fires on
 // every publish attempt; this one only advances when the broadcast
 // actually went through. Diagnostic surface for /health.
-const lastPublishOkAt = new Map<string, number>();
+export const lastPublishOkAt = new Map<string, number>();
 
 async function publish(agent: string, session: string, event: SseEvent): Promise<void> {
   const key = streamKey(agent, session);
@@ -802,86 +803,7 @@ app.post('/auth/logout', (c) => {
   return c.json({ ok: true });
 });
 
-app.get('/healthz', (c) => c.text('ok'));
-
-// Server startup wall-clock — used by /health to compute uptime.
-const SERVER_BOOTED_AT = Date.now();
-
-// Diagnostic endpoint. Read-only snapshot of per-session lock state +
-// queue depth + last SSE/engine event timestamp. Designed for the
-// "morning incident" scenario where a single session has wedged: a
-// curl against /health shows which (agent,session) is busy, for how
-// long, when its last engine event arrived, and how many turns are
-// queued behind it — no restart needed to diagnose.
-app.get('/health', (c) => {
-  const now = Date.now();
-  const lockfile = readLockfile();
-  const sessions = listAllSessionLockStates().map((s) => {
-    const key = streamKey(s.agent, s.session);
-    const lastEvent = lastEngineEventAt.get(key);
-    const lastOk = lastPublishOkAt.get(key);
-    const subCount = streams.get(key)?.size ?? 0;
-    return {
-      agent: s.agent,
-      session: s.session,
-      busy: s.busy,
-      activePriority: s.activePriority,
-      activeSince: s.activeSince,
-      activeAgeMs: s.activeSince ? now - s.activeSince : null,
-      activeCallId: s.activeCallId ?? null,
-      activeTurnId: s.activeTurnId ?? null,
-      queueLength: s.queueLength,
-      userWaiting: s.userWaiting,
-      agentWaiting: s.agentWaiting,
-      // Phase 2: the waiters by name — id, origin kind, a text preview.
-      queued: listSessionWaiters(s.agent, s.session).map((w) => {
-        const it = w.workId ? getWork(w.workId) : undefined;
-        return {
-          id: w.workId ?? w.turnId ?? null,
-          kind: it?.origin.kind ?? (w.priority === 'user' ? 'human' : 'agent'),
-          preview: it?.preview ?? '',
-          enqueuedAt: w.enqueuedAt,
-          position: w.position,
-        };
-      }),
-      lastEngineEventAt: lastEvent ?? null,
-      lastEngineEventAgoMs: lastEvent ? now - lastEvent : null,
-      // SSE-broadcast diagnostics (added 2026-05-19). Helps spot a wedged
-      // subscriber pattern at a glance: subscriberCount > 0 but
-      // lastPublishOkAgoMs growing without bound = at least one stuck
-      // client. After the publish() timeout fix, this auto-heals; the
-      // counters are the canary that signals it's happening.
-      subscriberCount: subCount,
-      lastPublishOkAt: lastOk ?? null,
-      lastPublishOkAgoMs: lastOk ? now - lastOk : null,
-    };
-  });
-  const busySessions = sessions.filter((s) => s.busy);
-  return c.json({
-    ok: true,
-    serverPid: process.pid,
-    serverBootedAt: SERVER_BOOTED_AT,
-    serverUptimeMs: now - SERVER_BOOTED_AT,
-    lockfilePid: lockfile?.pid ?? null,
-    lockfileStartedAt: lockfile?.startedAt ?? null,
-    activeSessions: busySessions.length,
-    totalKnownSessions: sessions.length,
-    // Shared-login credential sync (claude-cli). `identical: false` with
-    // both sides present means the stores have diverged and the watcher
-    // hasn't caught up — if that state persists, auth is about to break.
-    // Expiry values only, never token material.
-    claudeAuth: credentialSyncStatus(),
-    // Embedding model health. `state: "failed"` means every agent's memory
-    // retrieval is FTS-only (BM25 without vectors) — the server keeps
-    // running, but semantic recall and REM dedup are silently degraded.
-    memoryEmbedder: getEmbedderStatus(),
-    // Shared vault/wiki index (one per instance). `state: "building"`
-    // right after an update means agents still read vault/wiki from
-    // their own DB; `ready` means they read from index/shared.db.
-    sharedIndex: sharedIndexStatus(),
-    sessions,
-  });
-});
+registerHealthRoutes(app, { lastEngineEventAt, lastPublishOkAt, streamKey, streams });
 
 // FileView: read-only viewer for filesystem artefacts that agents
 // reference by absolute path in chat messages (feedback reports, logs,
