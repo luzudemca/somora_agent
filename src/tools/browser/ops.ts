@@ -23,6 +23,9 @@ export type BrowserOp =
   | { op: 'close_tab'; tab: string }
   | { op: 'stop' };
 
+/** Every op the tool knows — the tool schema and runBrowserOp use this list. */
+export const BROWSER_OPS = ['open', 'tabs', 'status', 'snapshot', 'act', 'screenshot', 'request_handoff', 'close_tab', 'stop'] as const;
+
 export interface BrowserOpContext {
   agent: string;
   session?: string;
@@ -66,6 +69,11 @@ const HINTS: Record<string, string> = {
 };
 
 export async function runBrowserOp(ctx: BrowserOpContext, input: BrowserOp): Promise<BrowserOpResult> {
+  // POST /browser/op passes any op through: an unknown one answered with
+  // an empty body (no case matched, 2026-10-14).
+  if (!(BROWSER_OPS as readonly string[]).includes(input.op)) {
+    return { op: input.op, ok: false, error: `unknown op "${String(input.op)}"`, hint: `Use one of: ${BROWSER_OPS.join(', ')}.` };
+  }
   const svc = getBrowserService();
   try {
     if (!ctx.config.browser.enabled) throw new BrowserOpError('BROWSER_DISABLED', 'browser.enabled is false');

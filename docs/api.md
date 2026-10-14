@@ -2835,7 +2835,8 @@ window.
 | `input` | yes | The tool's arguments, for example `{"op": "open", "url": "…"}` or `{"op": "snapshot", "tab": "…"}`. |
 
 Returns the tool's result object (`ok`, `error`, `hint`, `tab`,
-`snapshot` and so on). A refusal by the tool is still a `200`. `400`
+`snapshot` and so on). A refusal by the tool is still a `200`, and so
+is an unknown `op`: `ok: false` with the valid ones in `hint`. `400`
 without an `input.op`, `404` for an unknown agent.
 
 ### `POST /browser/:id/restart`

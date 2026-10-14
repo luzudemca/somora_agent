@@ -8,7 +8,7 @@
 import { z } from 'zod';
 import { loopbackFetch } from '../../server/loopback-fetch.ts';
 import type { ToolDefinition } from '../types.ts';
-import { runBrowserOp, type BrowserOp, type BrowserOpResult } from './ops.ts';
+import { BROWSER_OPS, runBrowserOp, type BrowserOp, type BrowserOpResult } from './ops.ts';
 
 const TAB_RE = /^t\d+$/;
 const REF_RE = /^(?:f\d+)?e\d+$/;
@@ -19,7 +19,7 @@ const REF_RE = /^(?:f\d+)?e\d+$/;
 // with `op` stripped ("Invalid discriminator value", 2026-09-08). The
 // per-op requirements are checked in the handler; the JSON schema below still
 // spells out the variants for the openai-compatible engine.
-const OPS = ['open', 'tabs', 'status', 'snapshot', 'act', 'screenshot', 'request_handoff', 'close_tab', 'stop'] as const;
+const OPS = BROWSER_OPS;
 const NEEDS_TAB = new Set(['snapshot', 'act', 'screenshot', 'close_tab']);
 
 const BrowserInput = z

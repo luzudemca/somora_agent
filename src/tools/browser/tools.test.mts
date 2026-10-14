@@ -4,6 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { browserTool } from './tools.ts';
+import { BROWSER_OPS, runBrowserOp } from './ops.ts';
 
 test('browser tool input schema is a plain ZodObject with an `op` shape entry', () => {
   const shape = (browserTool.inputSchema as unknown as { shape?: Record<string, unknown> }).shape;
@@ -23,4 +24,13 @@ test('per-op requirements are refused before any browser work', async () => {
   assert.match(r2.error ?? '', /act needs action/);
   const r3 = await browserTool.handler({ op: 'snapshot' } as never, ctx);
   assert.match(r3.error ?? '', /snapshot needs tab/);
+});
+
+test('an unknown op through POST /browser/op gets an answer naming the valid ones, not an empty body', async () => {
+  const ctx = { agent: 'x', config: { browser: { enabled: true } } } as never;
+  const r = await runBrowserOp(ctx, { op: 'close' } as never);
+  assert.equal(r.ok, false);
+  assert.match(r.error ?? '', /unknown op "close"/);
+  assert.match(r.hint ?? '', /close_tab/);
+  assert.deepEqual([...BROWSER_OPS].sort(), ['act', 'close_tab', 'open', 'request_handoff', 'screenshot', 'snapshot', 'status', 'stop', 'tabs']);
 });
