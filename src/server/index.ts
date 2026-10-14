@@ -234,6 +234,7 @@ import { cancelTaskCascade, completeTask, failTask, getTask, listTasksForAgent, 
 import { reserveSpawnSlot, releaseSpawnSlot } from '../tools/agents/spawn.ts';
 import { readSessionJsonlRaw, renderSessionMarkdown } from './session-export.ts';
 import { codexReasoningEffort, resolveOpenAiReasoning } from '../engine/thinking-params.ts';
+import { registerInboxRoutes } from './routes/inbox.ts';
 
 type Subscriber = (e: SseEvent) => Promise<void>;
 interface StreamSub {
@@ -660,7 +661,7 @@ const app = new Hono();
 // The inbox (src/server/inbox.ts): notices for the person running
 // somora. Reads the log from here on; the state check starts below,
 // next to the update check it reads.
-const inbox = new Inbox();
+export const inbox = new Inbox();
 onLog((_level, line) => inboxFromLog(inbox, line));
 
 app.use('*', async (c, next) => {
@@ -1874,7 +1875,7 @@ updateChecker.start();
 // subagents.tools.deny entries that name nothing (a typo): logged once
 // per change and shown in the inbox; the list still applies.
 let subagentDenyUnknown: string[] = [];
-async function refreshSubagentDenyCheck(): Promise<void> {
+export async function refreshSubagentDenyCheck(): Promise<void> {
   const fresh = await getFreshConfig().catch(() => config);
   const defs = tools.list();
   const unknown = unknownToolRules(
@@ -1888,7 +1889,7 @@ async function refreshSubagentDenyCheck(): Promise<void> {
   subagentDenyUnknown = unknown;
 }
 
-function checkInboxState(): void {
+export function checkInboxState(): void {
   void refreshSubagentDenyCheck();
   inboxFromState(inbox, {
     version: SOMORA_VERSION,
@@ -1906,36 +1907,7 @@ void refreshSubagentDenyCheck();
 setTimeout(checkInboxState, 30_000).unref();
 setInterval(checkInboxState, 5 * 60_000).unref();
 
-// GET /inbox — what the inbox shows, and how much is unread.
-app.get('/inbox', async (c) => {
-  // A config.yaml broken a moment ago shows up here, not 5 minutes later.
-  await getFreshConfig().catch(() => undefined);
-  await refreshSubagentDenyCheck();
-  checkInboxState();
-  return c.json({ entries: inbox.list(), unread: inbox.unread(), muted: inbox.muted() });
-});
-
-// POST /inbox/read {keys?} — mark these (or all) as read.
-app.post('/inbox/read', async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { keys?: unknown };
-  const keys = Array.isArray(body.keys) ? body.keys.filter((k): k is string => typeof k === 'string') : undefined;
-  inbox.markRead(keys);
-  return c.json({ ok: true, unread: inbox.unread() });
-});
-
-// POST /inbox/mute {key, mode} — "don't report again": until the thing
-// resolved once, or forever. POST /inbox/unmute {key} undoes it.
-app.post('/inbox/mute', async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { key?: unknown; mode?: unknown };
-  const mode = body.mode === 'forever' ? 'forever' : 'until-resolved';
-  if (typeof body.key !== 'string' || !inbox.mute(body.key, mode)) return c.json({ error: 'no such inbox entry' }, 404);
-  return c.json({ ok: true, unread: inbox.unread() });
-});
-app.post('/inbox/unmute', async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as { key?: unknown };
-  if (typeof body.key !== 'string' || !inbox.unmute(body.key)) return c.json({ error: 'no such muted entry' }, 404);
-  return c.json({ ok: true, unread: inbox.unread() });
-});
+registerInboxRoutes(app, { checkInboxState, inbox, refreshSubagentDenyCheck });
 
 /** Version plus, when known, what somora.ai says is current. */
 app.get('/version', (c) => {
