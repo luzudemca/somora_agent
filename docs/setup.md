@@ -207,7 +207,7 @@ blocks for you. By hand, edit `providers` in `~/.somora/config.yaml`.
 
 | Kind | Engine | Login |
 |---|---|---|
-| Claude subscription | `claude-cli` | `somora auth login`. Claude Code is bundled with somora. A Claude Code you installed yourself, and its login, is used instead when present. No API key. |
+| Claude subscription | `claude-cli` | `somora claude login`. Claude Code is bundled with somora. A Claude Code you installed yourself, and its login, is used instead when present. No API key. |
 | ChatGPT subscription | `codex-cli` | `somora codex login`. Codex is bundled with somora. A login made with a global Codex is picked up too. |
 | Grok subscription | `grok-cli` | `somora grok login`, or `somora grok login --device-auth` on a machine without a browser. The Grok CLI is bundled with somora. A login made with a global Grok is picked up too. |
 | Own server or API key | `openai-compatible` | Ollama, LM Studio, vLLM, oMLX, OpenRouter or any other server with a `/v1/chat/completions` endpoint. |
@@ -526,7 +526,7 @@ your Claude Code cannot break somora's state. The folder is created at
 the first server start.
 
 Only the login is shared. somora keeps the credentials file in both
-folders identical, so one `claude auth login` covers both:
+folders identical, so one `somora claude login` covers both:
 
 - A change on either side is copied to the other within seconds while
   the server runs. A check every 60 seconds, at server start and before
@@ -538,8 +538,8 @@ folders identical, so one `claude auth login` covers both:
   needed.
 
 ```bash
-somora auth status   # both stores: age, expiry, in sync or diverged
-somora auth sync     # reconcile now
+somora claude status   # both stores: age, expiry, in sync or diverged
+somora claude sync     # reconcile now
 ```
 
 `GET /health` reports the same state under `claudeAuth`, without any
@@ -547,9 +547,9 @@ token.
 
 | You want | Do this |
 |---|---|
-| A separate Claude account for somora | Set `claudeCli.sharedUserCredentials: false`, then run `CLAUDE_CONFIG_DIR=~/.somora/claude-home claude auth login`. somora then touches neither file. |
+| A separate Claude account for somora | Set `claudeCli.sharedUserCredentials: false`, then run `CLAUDE_CONFIG_DIR=~/.somora/claude-home somora claude auth login`. somora then touches neither file. |
 | Another config folder | Set `CLAUDE_CONFIG_DIR` in `~/.somora/somora.env` or in the service's environment. |
-| No login yet | Run `claude auth login` in any terminal. The running server picks it up, no restart needed. |
+| No login yet | Run `somora claude login` in any terminal. The running server picks it up, no restart needed. |
 
 A `claude` or `codex` that an agent starts in a terminal or shell sees
 your normal login, not somora's folder. The tmux guide explains
@@ -756,9 +756,12 @@ in the agents guide.
 | `somora config check [file]` | Validates `config.yaml` (or another file) exactly as the server does. Exit code 0 valid, 1 invalid, 2 unreadable. |
 | `somora config path` | Prints the path of the config file. |
 | `somora telemetry show [--json]` | Shows what the daily update check sends and when it last ran. |
-| `somora auth login` | Logs in with a Claude subscription, through the bundled Claude Code or your own. |
-| `somora auth status` | Shows both Claude credential stores. |
-| `somora auth sync` | Reconciles the two stores now. |
+| `somora claude <args>` | Runs Claude Code, the bundled one or your own: `login`, `logout`, `status`, `sync`, `--version`, and anything else Claude Code takes. Without arguments it shows which Claude Code, where the logins are and how long the login is valid. |
+| `somora claude login` | Logs in with a Claude subscription. |
+| `somora claude logout` | Logs out of your own Claude folder. somora keeps its copy of the login until the next login. |
+| `somora claude status` | Shows both Claude credential stores. |
+| `somora claude sync` | Reconciles the two stores now. |
+| `somora auth …` | The old name of `somora claude`. It still works and says so. |
 | `somora codex <args>` | Runs the bundled Codex: `login`, `logout`, `debug models`, `features list`, `--version`. |
 | `somora grok <args>` | Runs the bundled Grok CLI: `login`, `login --device-auth`, `logout`, `models`, `--version`. Without arguments it shows where the Grok CLI and its login are and how long the login is valid. |
 | `somora skill list`, `check`, `add`, `update`, `remove` | Manages skills. Run `somora skill` for the details. |
@@ -937,9 +940,9 @@ and `server.tls.reloaded` when a new certificate was loaded. A failed
 renewal is most often the missing `sudo tailscale set --operator=$USER`.
 
 **A Claude turn fails with `OAuth session expired and could not be
-refreshed`.** Run `somora auth status`.
-When the stores diverged, `somora auth sync`. When both are expired,
-`claude auth login`.
+refreshed`.** Run `somora claude status`.
+When the stores diverged, `somora claude sync`. When both are expired,
+`somora claude login`.
 
 **The test message was answered by the backup model.** The first model
 did not respond. Check its login with `somora setup models`.

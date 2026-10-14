@@ -60,7 +60,7 @@ pull requests.
 ## Claude Code subscription
 
 Engine `claude-cli`. It runs through the Claude Agent SDK on your
-`claude login`. There is no API key and no sampling: the CLI does not
+Claude login (`somora claude login`). There is no API key and no sampling: the CLI does not
 expose sampling parameters.
 
 ```yaml

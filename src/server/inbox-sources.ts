@@ -43,7 +43,7 @@ function loginTitle(engine: string, provider: string): string {
 }
 
 function loginHint(engine: string, provider: string): string {
-  if (engine === 'claude-cli') return 'Run `somora auth login` on the server.';
+  if (engine === 'claude-cli') return 'Run `somora claude login` on the server.';
   if (engine === 'codex-cli') return 'Run `somora codex login` on the server.';
   if (engine === 'grok-cli') return 'Run `somora grok login` on the server.';
   return `Check \`providers.${provider || '<name>'}.apiKey\` in config.yaml.`;

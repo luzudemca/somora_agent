@@ -847,7 +847,7 @@ export const claudeCliEngine: AgentEngine = {
         const hint =
           healed === 'pulled' || healed === 'pushed'
             ? 'Credential drift detected and auto-healed — just resend your message.'
-            : 'Please run `claude login` in your terminal and resend (`somora auth status` shows the credential state).';
+            : 'Please run `somora claude login` on the server and resend (`somora claude status` shows the credential state).';
         yield { kind: 'error', ts: ts(), engine: ENGINE, message: `${finalText.trim()} — ${hint}`, providerError: true };
         yield { kind: 'turn_end', ts: ts(), engine: ENGINE, turnId };
         return;
@@ -875,7 +875,7 @@ export const claudeCliEngine: AgentEngine = {
         const hint =
           healed === 'pulled' || healed === 'pushed'
             ? 'Credential drift detected and auto-healed — just resend your message.'
-            : 'Most common cause: expired OAuth session. `somora auth status` shows the credential state; run `claude login` if needed and resend.';
+            : 'Most common cause: expired OAuth session. `somora claude status` shows the credential state; run `somora claude login` if needed and resend.';
         yield {
           kind: 'error',
           ts: ts(),

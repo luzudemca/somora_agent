@@ -266,7 +266,7 @@ async function setupClaude(ctx: Ctx, config: YamlFile): Promise<void> {
       p.handOver(bin, ['auth', 'login']);
     }
     if (!claudeLoggedIn()) {
-      warn('no login yet — the models are added anyway; log in later with:  somora auth login');
+      warn('no login yet — the models are added anyway; log in later with:  somora claude login');
     } else {
       ok('logged in');
     }

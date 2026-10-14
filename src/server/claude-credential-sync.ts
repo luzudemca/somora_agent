@@ -28,7 +28,7 @@
 //   tie-breaker when a side doesn't parse.
 //
 // This module is logger-free by design: the somora server injects pino
-// via configureClaudeCredentialSync(); the `somora auth` CLI uses it
+// via configureClaudeCredentialSync(); the `somora claude` CLI uses it
 // without booting the logging stack.
 
 import {
@@ -134,7 +134,7 @@ export interface CredentialPairStatus {
   lastSyncAt: number | null;
 }
 
-/** Read-only snapshot for /health and `somora auth status`. Never
+/** Read-only snapshot for /health and `somora claude status`. Never
  *  exposes token material — only existence, expiry, and divergence. */
 export function credentialSyncStatus(): CredentialPairStatus {
   const userPath = userCredentialPath();
@@ -368,7 +368,7 @@ export function reconcileClaudeCredentials(): CredentialSyncResult {
     log.warn({
       msg: 'claude_credentials.sync_failed',
       err: String(err),
-      hint: 'credential drift could not be auto-healed; check file permissions on ~/.claude and $CLAUDE_CONFIG_DIR, or run `somora auth status`',
+      hint: 'credential drift could not be auto-healed; check file permissions on ~/.claude and $CLAUDE_CONFIG_DIR, or run `somora claude status`',
     });
     lastResult = 'unavailable';
     lastAt = Date.now();

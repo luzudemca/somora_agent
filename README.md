@@ -169,7 +169,7 @@ Hard:
 - **tmux** — for the `tmux` tool (long-lived terminal sessions for agents)
   and the web tmux app.
 - **At least one LLM backend:** a Claude subscription (engine
-  `claude-cli` — Claude Code is bundled, `somora auth login`); a ChatGPT
+  `claude-cli` — Claude Code is bundled, `somora claude login`); a ChatGPT
   subscription (engine `codex-cli` — Codex is bundled, `somora codex login`); a SuperGrok or
   Premium subscription (engine `grok-cli` — the Grok CLI is bundled, `somora grok login`); or any OpenAI-compatible HTTP
   server (Ollama, LM Studio, vLLM, oMLX, OpenRouter, …).
@@ -277,7 +277,7 @@ ONNXRUNTIME_NODE_INSTALL=skip npm install -g somora \
   --allow-scripts=cpu-features,esbuild,fsevents,node-pty,onnxruntime-node,protobufjs,somora,ssh2
 
 # 3. Log in to at least one LLM backend (pick one or more)
-somora auth login                         # Claude subscription; Claude Code is bundled
+somora claude login                         # Claude subscription; Claude Code is bundled
 somora codex login                        # ChatGPT subscription; Codex is bundled
 somora grok login                         # SuperGrok or Premium subscription; the Grok CLI is bundled
 # local models: run Ollama / LM Studio / oMLX and add the endpoint to

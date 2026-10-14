@@ -73,10 +73,10 @@ Usage:
   somora tui                         launch the TUI against the running server
   somora skill <subcommand>          list/check/add/update/remove skills
                                      (run \`somora skill\` for sub-help)
-  somora auth login|status|sync      Claude subscription login (bundled Claude Code) / inspect / reconcile
-                                     the two credential stores
   somora key [show|link|rotate]      the login key: print it, a link + QR code that
                                      signs a browser in, or a new key
+  somora claude [args...]            run Claude Code (e.g. \`somora claude login\`,
+                                     \`somora claude status\`); somora keeps the login in step with ~/.claude
   somora codex [args...]             run the bundled Codex CLI (e.g. \`somora codex login\`,
                                      \`somora codex debug models\`); somora mirrors the login
   somora grok [args...]              run the bundled Grok CLI (e.g. \`somora grok login\`); somora
@@ -714,9 +714,15 @@ async function main(): Promise<number> {
       const { runSkillCli } = await import('./skill.ts');
       return await runSkillCli(rest);
     }
+    case 'claude': {
+      const { runClaudeCli } = await import('./claude.ts');
+      return runClaudeCli(rest);
+    }
     case 'auth': {
-      const { runAuthCli } = await import('./auth.ts');
-      return runAuthCli(rest);
+      // The name until 2026-10-14; scripts, notes and older docs still use it.
+      process.stderr.write('`somora auth` is now `somora claude`.\n');
+      const { runClaudeCli } = await import('./claude.ts');
+      return runClaudeCli(rest);
     }
     case 'key': {
       const { runKeyCli } = await import('./key.ts');

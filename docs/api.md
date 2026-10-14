@@ -296,7 +296,7 @@ Top-level blocks:
 
 | Block | Meaning |
 |---|---|
-| `claudeAuth` | State of the login shared between `~/.claude` and somora's own Claude folder. Expiry times only, never tokens. `identical: false` with both sides present means they have drifted apart. If that stays, run `somora auth status`. |
+| `claudeAuth` | State of the login shared between `~/.claude` and somora's own Claude folder. Expiry times only, never tokens. `identical: false` with both sides present means they have drifted apart. If that stays, run `somora claude status`. |
 | `memoryEmbedder` | The embedding model behind memory search. `state` is `ok`, `loading` or `failed`. With `failed`, `error` says why and every search is keyword only until a retry succeeds. |
 | `sharedIndex` | The search index over vault and wiki that all agents share. `state` is `ready`, `building`, `disabled` (no vault configured) or `failed` with `error`. `built_by` is `seed:<agent>` or `sweep`. `null` until the server has opened it. |
 

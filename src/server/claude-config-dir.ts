@@ -55,7 +55,7 @@ export function setupClaudeConfigDir(): void {
     logger.warn({
       msg: 'claude_config_dir.credentials_missing',
       expected: credSrc,
-      hint: 'no claude login found anywhere; claude-cli engine will fail until the user runs `claude login`',
+      hint: 'no claude login found anywhere; claude-cli engine will fail until the user runs `somora claude login`',
     });
   }
 

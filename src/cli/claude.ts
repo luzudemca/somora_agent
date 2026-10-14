@@ -1,11 +1,16 @@
-// `somora auth` — visibility + manual control for the shared claude-cli
-// login (see src/server/claude-credential-sync.ts for the mechanism).
+// `somora claude [args...]` — the Claude Code that somora runs, and the
+// login it shares with ~/.claude (src/server/claude-credential-sync.ts).
+// The same shape as `somora codex` and `somora grok`:
 //
-//   somora auth login    log in with the Claude subscription (the
-//                        bundled Claude Code, or your own when installed)
-//   somora auth status   read-only view of both credential stores
-//   somora auth sync     one-shot reconcile (what the running server's
-//                        watcher does continuously)
+//   somora claude login    log in with the Claude subscription (the
+//                          bundled Claude Code, or your own when installed)
+//   somora claude logout   log out of ~/.claude (`claude auth logout`)
+//   somora claude status   read-only view of both credential stores
+//   somora claude sync     one-shot reconcile (what the running server's
+//                          watcher does continuously)
+//   somora claude <args>   anything else goes to that Claude Code
+//
+// `somora auth …` (the name until 2026-10-14) still works and says so.
 //
 // Deliberately logger-free and side-effect-free on `status`: the config
 // file is read raw (js-yaml, no schema validation, no default-config
@@ -40,21 +45,56 @@ function fmtTs(ms: number | null): string {
   return new Date(ms).toISOString().replace('T', ' ').slice(0, 19);
 }
 
-function usage(): string {
-  return `somora auth — shared claude-cli login utilities
-
-Usage:
-  somora auth login    log in with your Claude subscription (uses the bundled Claude Code)
-  somora auth status   show both credential stores (mtime, OAuth expiry, divergence)
-  somora auth sync     reconcile now (newest OAuth chain wins, other side is overwritten)
-`;
+function claudeVersion(bin: string): string | null {
+  const r = spawnSync(bin, ['--version'], { encoding: 'utf8', timeout: 10_000 });
+  return r.status === 0 ? (r.stdout.trim().split(/\s+/)[0] ?? null) : null;
 }
 
-export function runAuthCli(args: string[]): number {
+function usage(): string {
+  const bin = claudeBinaryForLogin();
+  const version = bin ? claudeVersion(bin.path) : null;
+  const label = !bin ? 'not found' : bin.bundled ? `bundled Claude Code ${version ?? '?'}` : `${bin.path}${version ? ` ${version}` : ''}`;
+  const somoraHome = process.env.SOMORA_HOME ?? join(homedir(), '.somora');
+  const s = credentialSyncStatus();
+  const exp = s.somoraExpiresAt ?? s.userExpiresAt;
+  const login = !s.somoraExists && !s.userExists ? 'none — run `somora claude login`' : exp && exp > Date.now() ? `valid until ${fmtTs(exp).slice(0, 16)} UTC (renewed by Claude Code)` : 'expired — run `somora claude login`';
+  return [
+    `somora claude — Claude Code (${label})`,
+    '',
+    'Usage: somora claude <claude args...>',
+    '  somora claude login               sign in with your Claude subscription (shows a link, you paste the code back)',
+    '  somora claude logout              sign out of your Claude home; somora keeps its own copy until the next login',
+    '  somora claude status              both login stores: age, expiry, in step or not',
+    '  somora claude sync                bring the two stores in step now',
+    '  somora claude --version',
+    '',
+    `Claude home (yours):  ${join(homedir(), '.claude')}`,
+    `Claude home (somora): ${process.env.CLAUDE_CONFIG_DIR ?? join(somoraHome, 'claude-home')}  (login kept in step with yours)`,
+    `Login:                ${login}`,
+    '',
+  ].join('\n');
+}
+
+export function runClaudeCli(args: string[]): number {
   const cmd = args[0];
   if (!cmd || cmd === '--help' || cmd === '-h' || cmd === 'help') {
     process.stdout.write(usage());
     return 0;
+  }
+  // Everything but somora's own four goes to Claude Code as it is, like
+  // `somora codex …` and `somora grok …` do.
+  if (!['login', 'logout', 'status', 'sync'].includes(cmd)) {
+    const bin = claudeBinaryForLogin();
+    if (!bin) {
+      process.stderr.write('no Claude Code binary found — the bundled one is missing; reinstall somora, or install Claude Code: curl -fsSL https://claude.ai/install.sh | bash\n');
+      return 1;
+    }
+    const r = spawnSync(bin.path, args, { stdio: 'inherit' });
+    if (r.error) {
+      process.stderr.write(`somora claude: ${r.error.message}\n`);
+      return 1;
+    }
+    return r.status ?? 1;
   }
 
   const enabled = sharedCredentialsEnabled();
@@ -81,6 +121,19 @@ export function runAuthCli(args: string[]): number {
     }
     process.stdout.write('logged in. somora uses this login for the claude-cli engine.\n');
     return 0;
+  }
+
+  if (cmd === 'logout') {
+    const bin = claudeBinaryForLogin();
+    if (!bin) {
+      process.stderr.write('no Claude Code binary found — the bundled one is missing; reinstall somora.\n');
+      return 1;
+    }
+    const r = spawnSync(bin.path, ['auth', 'logout'], { stdio: 'inherit' });
+    if (r.status === 0) {
+      process.stdout.write('signed out of your Claude home. somora keeps its own copy of the login until you log in again (`somora claude status` shows both).\n');
+    }
+    return r.status ?? 1;
   }
 
   if (cmd === 'status') {
@@ -110,7 +163,7 @@ export function runAuthCli(args: string[]): number {
             : (s.userExpiresAt ?? 0) > (s.somoraExpiresAt ?? 0)
               ? 'user side'
               : 'somora side';
-        process.stdout.write(`  state     DIVERGED — newest chain: ${winner}. Run \`somora auth sync\` (or let the running server's watcher heal it).\n`);
+        process.stdout.write(`  state     DIVERGED — newest chain: ${winner}. Run \`somora claude sync\` (or let the running server's watcher heal it).\n`);
       }
     }
     return 0;
@@ -134,6 +187,5 @@ export function runAuthCli(args: string[]): number {
     return result === 'unavailable' ? 1 : 0;
   }
 
-  process.stderr.write(`unknown auth subcommand: ${cmd}\n\n${usage()}`);
   return 1;
 }
