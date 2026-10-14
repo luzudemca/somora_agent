@@ -431,7 +431,7 @@ that process.
 | `GET /browser/stream` | The same list as server-sent events. A `browsers` event at once and on every change. |
 | `POST /browser/:id/control` | Body `{"mode":"human"}` takes over. `{"mode":"agent"}` hands back. Optional `handoffId` and `by`. |
 | `POST /browser/:id/restart` | Starts a stopped browser again with a blank page. |
-| `POST /browser/op` | Runs a tool operation. Body `{agent, session, input}`. |
+| `POST /browser/op` | Runs a tool operation. Body `{agent, session, input}`. An unknown `input.op` answers `ok: false` with the valid ops in `hint`. |
 | `GET /browser/attach` | WebSocket for the live picture and input. Query `view`, optional `tab` and `viewer`. |
 
 With `browser.enabled` off, `GET /browser/status` answers

@@ -43,7 +43,8 @@ answer appears in the session the trigger points to.
 
 ## Schedules
 
-Every trigger has the source type `time` and one of five specs:
+A time trigger has the source type `time` and one of five specs (a
+check trigger has the type `check`, see Check triggers):
 
 | `spec.type` | Fields | Example | Fires |
 |---|---|---|---|
@@ -83,7 +84,7 @@ Agents use the `sentinel` tool with the action `create`:
 |---|---|---|
 | `name` | yes | Label, up to 100 characters. The trigger id is built from it, for example `morning-mail-summary-a7c3`. |
 | `intent` | no | What the user wanted, up to 500 characters. Shown to the agent at every fire. |
-| `source` | yes | `{ "type": "time", "spec": … }`, see Schedules. |
+| `source` | yes | `{ "type": "time", "spec": … }`, see Schedules, or a check source, see Check triggers. |
 | `dispatch.agent` | yes | The agent to wake. It must exist. |
 | `dispatch.session` | no | The session to fire in, see below. |
 | `dispatch.prompt` | yes | The text the agent receives as its message. |
@@ -177,9 +178,10 @@ the first line (shebang) is ignored.
 |---|---|
 | `.sh`, `.bash` | bash |
 | `.py` | python3 |
-| `.js`, `.mjs`, `.cjs` | node |
+| `.js`, `.mjs`, `.cjs` | node; `.js` and `.mjs` run as ES modules (`import`), use `.cjs` for `require` |
 
-The script only observes: it reads a status, fetches data and prints
+The file must not be empty and at most 256 KB. The script only
+observes: it reads a status, fetches data and prints
 one JSON object on standard output. Actions belong in the agent's turn
 after the wake.
 
@@ -214,8 +216,14 @@ A skill's secrets reach the script when the script names one of the
 skill's programs anywhere, also as a string in Python or JavaScript:
 `subprocess.run(["gog", "gmail", …])` gets the gog variables.
 
-The script runs in the agent's workspace, with the same blocked
-commands as the agent's shell. The login key is not passed on. Before
+The script runs in the agent's workspace as the somora user. When the
+trigger is created, a shell script is checked against the commands
+`exec` blocks, and a script in any language is refused when it
+restarts, stops or updates somora (`somora restart`, `systemctl …
+somora`, the restart route): a check would do that on every run.
+
+Nothing is checked while the script runs. The login key is not passed
+on. Before
 anyone reads the output, provider keys and other known secrets in it
 are blacked out.
 
@@ -322,12 +330,19 @@ check would do. Nothing is saved and nobody is woken.
 }
 ```
 
-The answer carries `ok`, `answer` (the parsed JSON), `verdict` (in
-words, what would happen), and for a failed run `error` and the end of
-`stderr`. Then the agent creates the trigger with the same `source`, a
-`name` and a `dispatch.prompt` saying what to do when woken. `create`
-is refused unless this exact script, as the file is now, passed a dry
-run in the last two hours.
+The answer carries `ok`, `art` (1 plain, 2 judged), `ms`, `answer`
+(the parsed JSON), `decision` (the decision model's answer, for a
+judged check), `verdict` (in words, what would happen) and `next`, and
+for a failed run `error`, `errorClass` and the end of `stderr`.
+
+With `dispatch.agent` the dry run runs as that agent, in its
+workspace.
+
+Then the agent creates the trigger with the same `source`, a `name`
+and a `dispatch.prompt` saying what to do when woken. `create` is
+refused unless this exact script, as the file is now, passed a dry run
+of the same kind (plain or judged) for the same agent in the last two
+hours. A failed dry run does not count.
 
 | `source` field | Required | Meaning |
 |---|---|---|
@@ -337,22 +352,28 @@ run in the last two hours.
 | `mode` | yes | `once` or `watch`, see below. |
 | `interval` | yes | Time between two checks: `"15s"`, `"5m"`, `"1h"`. |
 | `deadline` | `once` only | An ISO time or a duration from now (`"2h"`), at most 24 hours away. |
-| `timeoutMs` | no | Time one run may take. Default 30000, at most 120000. |
+| `timeoutMs` | no | Time one run may take, at least 1000. Default 30000, at most 120000. |
 | `notifyOnFirst` | no | `watch` only: the first check may wake too. |
 | `decision` | no | Makes it a judged check, see below. |
 
 At creation somora copies the script to its own folder and records its
 fingerprint. The copy is what runs: the agent editing its file later
 changes nothing. To run a new version, the agent dry-runs it and calls
-`update` with the trigger id and the new `source`. A copy changed by
-anything else stops the trigger.
+`update` with the trigger id and the new `source`. Changing only
+settings (interval, deadline, description) with the same script and
+kind needs no dry run.
+
+Every `source` update starts the check over:
+a new starting state, the deadline counted from now, the counters at
+zero; only today's wake count stays. A copy changed by anything else
+stops the trigger.
 
 ### Once and watch
 
 | Mode | Wakes | Then |
 |---|---|---|
 | `once` | On the first `ready: true`, or once at the deadline with the last state. | The trigger is completed. |
-| `watch` | On each change from `ready: false` to `ready: true`, not on every positive check. | It keeps checking. |
+| `watch` | On each change from `ready: false` to `ready: true`, not on every positive check. A judged check: on new data that passes the wake rule. | It keeps checking. |
 
 The first check of a `watch` trigger only records the starting state,
 unless `notifyOnFirst` is set. Without that, a check created while the
@@ -386,7 +407,7 @@ The wake rule names one of them:
 | `{question, choice, minConfidence}` | `choice` | The probability of `choice` is at least `minConfidence`. |
 | `{question, minScore}` | `score` | The score is at least `minScore`. |
 
-The same data is never sent twice, and empty data (an empty list,
+The same data is never sent twice in a row, and empty data (an empty list,
 object or text) is never sent at all. The first check of a `watch`
 trigger only records the starting data. A decision model that cannot
 answer never wakes the agent: it is a check error, and the data is
@@ -425,10 +446,12 @@ the threshold. Data longer than 8000 characters is cut.
 
 | What happens | Result |
 |---|---|
-| The script fails, prints something else or runs too long | A check error. The next try comes after the interval, later when errors repeat (up to 15 minutes). |
+| The script fails, prints something else or runs too long | A check error. The next try comes after the interval, or after 30 seconds doubling with each repeat if that is longer (at most 15 minutes). |
 | Three check errors in a row | The trigger stops (status `error`) and the web client's inbox shows why. |
 | The script copy is missing or was changed, or its interpreter is missing | The trigger stops at once. |
+| A judged check runs after `decisions.model` was emptied | The trigger stops at once. |
 | The trigger woke its agent 24 times today | It pauses until the next UTC day, with a note in the inbox. |
+| A wake is held back by the trigger's `cooldownMs`, `maxFiresPerDay` or the agent's limit on parallel turns | Nothing is lost: the check counts as not made and runs again after 30 seconds, or when the cooldown ends. |
 | somora restarts | No checks are made up for the time it was down. Each trigger checks again within a minute, spread out so they do not all start at once. |
 
 Resuming a stopped trigger closes its inbox note at the next check.
@@ -441,7 +464,7 @@ All actions of the `sentinel` tool:
 |---|---|---|
 | `create` | `name`, `source`, `dispatch`, optional `intent`, `policy` | Creates a trigger. A check needs a dry run first. |
 | `dry_run` | `source` of type `check` | Runs the script once and shows what would happen. Nothing is saved. |
-| `update` | `id`, any of `source`, `prompt`, `name`, `intent` | Changes a trigger. A new script needs a dry run first. Noted in the history as `updated`. |
+| `update` | `id`, any of `source`, `prompt`, `name`, `intent` | Changes a trigger. `source` only on a check trigger; a new script or kind needs a dry run first. Noted in the history as `updated`. |
 | `list` | optional `owner`, `status`, `include_completed` | Lists triggers, newest first. Fired one-shots are hidden and counted in `hidden_completed`. |
 | `get` | `id` | Full detail of one trigger. For a check also `check`: counts of checks and wakes, the last check, the last decision and the next check. |
 | `pause` | `id` | Stops it from firing. |
@@ -571,7 +594,8 @@ either one matches.
 
 ## Cleanup of fired one-shots
 
-An `at` trigger gets the status `completed` once it has fired. `list`
+An `at` trigger gets the status `completed` once it has fired, a
+`once` check once it has woken its agent. `list`
 hides these, `purge_completed` deletes them all, and somora deletes each
 one with its history `sentinel.completedRetentionDays` days after its
 last fire. The sweep runs at server start and at least once a day.
@@ -612,15 +636,15 @@ sentinel:
 | Setting | Default | Meaning |
 |---|---|---|
 | `sentinel.completedRetentionDays` | `7` | Days a fired one-shot and its history are kept. `0` turns the automatic cleanup off. Allowed: 0 to 3650. |
-| `sentinel.checks.minIntervalOnceMs` | `15000` | Shortest interval of a `once` check. |
-| `sentinel.checks.minIntervalMs` | `60000` | Shortest interval of a `watch` check. |
-| `sentinel.checks.maxDeadlineMs` | `86400000` | Furthest deadline of a `once` check (24 hours). |
-| `sentinel.checks.timeoutMs` | `30000` | Time one check may run unless the trigger sets its own. |
-| `sentinel.checks.maxTimeoutMs` | `120000` | The most a trigger may set. |
-| `sentinel.checks.maxOutputBytes` | `65536` | Output kept; more is a check error. |
-| `sentinel.checks.maxConcurrent` | `4` | Checks running at the same time, all triggers together. |
-| `sentinel.checks.errorStreak` | `3` | Check errors in a row before the trigger stops. |
-| `sentinel.checks.maxWakesPerDay` | `24` | Wakes per check trigger and UTC day. |
+| `sentinel.checks.minIntervalOnceMs` | `15000` | Shortest interval of a `once` check. At least 1000. |
+| `sentinel.checks.minIntervalMs` | `60000` | Shortest interval of a `watch` check. At least 1000. |
+| `sentinel.checks.maxDeadlineMs` | `86400000` | Furthest deadline of a `once` check (24 hours). At least 60000. |
+| `sentinel.checks.timeoutMs` | `30000` | Time one check may run unless the trigger sets its own. At least 1000. |
+| `sentinel.checks.maxTimeoutMs` | `120000` | The most a trigger may set. At least 1000. |
+| `sentinel.checks.maxOutputBytes` | `65536` | Output kept; more is a check error. At least 1024. |
+| `sentinel.checks.maxConcurrent` | `4` | Checks running at the same time, all triggers together. Allowed: 1 to 64. |
+| `sentinel.checks.errorStreak` | `3` | Check errors in a row before the trigger stops. Allowed: 1 to 100. |
+| `sentinel.checks.maxWakesPerDay` | `24` | Wakes per check trigger and UTC day. Allowed: 1 to 1000. |
 
 `completedRetentionDays` needs a server restart. The `checks` settings
 need only a config reload (`/reload` in the TUI, the gear in the web
@@ -695,8 +719,8 @@ named explicitly.
 **A trigger was created with no next fire time.** The `at` moment was
 already in the past. Delete it and create it with a future time.
 
-**A new setting has no effect.** `sentinel` settings are read at
-server start. Restart somora.
+**A new setting has no effect.** `sentinel.checks` needs a config
+reload, `completedRetentionDays` a server restart.
 
 ## See also
 

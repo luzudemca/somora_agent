@@ -244,8 +244,8 @@ Toolsets `skills`, `sentinel` and `projects`.
 | `project_update` | Changes a project: paths, tags and other fields. |
 | `project_focus` | Pins a project to the current session. |
 
-`sentinel` with `list` hides one-shot triggers that already fired
-unless you pass `include_completed`. `purge_completed` drops them all.
+`sentinel` with `list` hides one-shot triggers that already fired (and
+`once` checks that woke their agent) unless you pass `include_completed`. `purge_completed` drops them all.
 
 ### Images, video and browser
 
@@ -534,7 +534,7 @@ every engine picks the tool up.
 - [tmux](tmux.md): shell and TUI session patterns
 - [External MCP servers](mcp.md): connecting tool servers
 - [Skills](skills.md): the skill system and per-agent visibility
-- [Sentinel](sentinel.md): scheduled triggers
+- [Sentinel](sentinel.md): scheduled triggers and check triggers
 - [Projects](projects.md): project manifests
 - [Image generation](imagegen.md) and [video generation](videogen.md)
 - [Shared browser](browser.md): the managed browser and handoffs

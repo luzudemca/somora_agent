@@ -141,8 +141,10 @@ On top of chat and memory, each optional and off until configured:
 - **Projects** — bind a session to a real-world thing via a manifest of
   pointers the agent sees in its prompt ([docs/projects.md](docs/projects.md)).
 - **Sentinel** — triggers that wake an agent on a schedule (`at` /
-  `every` / `daily` / `cron`) or when a small check script sees
-  something happen ([docs/sentinel.md](docs/sentinel.md)).
+  `every` / `daily` / `weekly` / `cron`) or when a small check script sees
+  something happen; a decision model can judge what the script fetched,
+  such as "a new mail that needs an answer today"
+  ([docs/sentinel.md](docs/sentinel.md)).
 - **External MCP servers** — one config entry, all engines see the tools,
   gateable per agent ([docs/mcp.md](docs/mcp.md)).
 - **Language servers** — with one installed, every file a builder
@@ -153,7 +155,8 @@ On top of chat and memory, each optional and off until configured:
   every engine ([docs/api.md → Steering](docs/api.md#steering)).
 - **Decision models** — agents ask a System One decision model (such as
   a self-hosted Clef) typed yes/no, choice and score questions about text
-  or images, and get probabilities back ([docs/decisions.md](docs/decisions.md)).
+  or images, and get probabilities back. Scripts and other programs ask
+  through `POST /decisions/evaluate` ([docs/decisions.md](docs/decisions.md)).
 
 ## Requirements
 

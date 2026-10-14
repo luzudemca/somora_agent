@@ -424,6 +424,8 @@ apply after a restart. These sections are read once at start:
 `server`, `memory`, `obsidian`, `wiki`, `mcp`, `claudeCli`, `codexCli`,
 `stt`, `tts`, `sentinel`, `updateCheck`, `tmux`, `web`, `mobile`
 
+One exception: `sentinel.checks` applies with the reload.
+
 Everything else, such as `providers`, `compaction`, `agentLoop` or
 `fallback`, applies with the reload.
 

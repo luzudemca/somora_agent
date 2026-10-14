@@ -1,4 +1,4 @@
-# Dream Phases
+# Dream phases
 
 While you are not chatting, somora tidies up what was said. Three
 background jobs, called REM, Deep and Lucid, turn conversations into

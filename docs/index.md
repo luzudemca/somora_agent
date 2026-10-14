@@ -44,7 +44,8 @@ takes about ten minutes. [Setup](setup.md) explains each step.
 | give agents long-term memory | [Memory](memory.md), [Wiki](wiki.md) and [Dream phases](dream-phases.md) |
 | talk instead of type | [Voice](voice.md) and [Realtime voice](realtime-voice.md) |
 | have agents make images or video | [Image generation](imagegen.md) and [Video generation](videogen.md) |
-| have agents act on a schedule | [Sentinel](sentinel.md) |
+| have agents act on a schedule or when something happens | [Sentinel](sentinel.md) |
+| let a model judge items for scripts and checks | [Decision models](decisions.md) |
 | know what is exposed and to whom | [Security](security.md) |
 | build my own client | [HTTP API](api.md) |
 
@@ -63,7 +64,8 @@ takes about ten minutes. [Setup](setup.md) explains each step.
 | **resource** | Another machine reached over SSH. File, shell and tmux tools can target it. |
 | **skill** | A Markdown how-to the agent loads when the situation calls for it. |
 | **tool** | Something an agent can call: read a file, run a command, search the web, ask another agent. |
-| **sentinel** | A trigger that starts an agent turn on a schedule. |
+| **sentinel** | A trigger that starts an agent turn on a schedule, or when a small check script sees that something happened. |
+| **decision model** | A small model that answers typed questions (yes/no, choice, score) about some data. Agents, scripts and Sentinel checks ask it. |
 
 ## After the first chat
 
@@ -102,7 +104,7 @@ takes about ten minutes. [Setup](setup.md) explains each step.
 | [Team](team.md) | Org chart for agents | Telling every agent who is who and who to involve |
 | [Builder agents](builder.md) | The builder kind | An agent that builds software: plan, Go, build, with a task panel and questions |
 | [Projects](projects.md) | Concept and workflow | Pinning a working set to a session |
-| [Sentinel](sentinel.md) | Trigger runtime | Scheduling proactive agent work |
+| [Sentinel](sentinel.md) | Trigger runtime | Waking agents on a schedule or when a check script sees a change |
 
 ### Memory
 

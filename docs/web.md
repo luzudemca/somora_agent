@@ -106,7 +106,7 @@ restart. Dream states refresh every 30 seconds.
 | `tmux` | List of tmux sessions on the host. Click one to attach. | always |
 | `terminal` | A fresh shell in the somora workspace. | always |
 | `sessions` | All sessions of all agents. | always |
-| `sentinel` | Triggers: list, history, test, pause, resume, delete. | always |
+| `sentinel` | Triggers: list, history, test or dry run, pause, resume, delete. | always |
 | `abilities` | Tools and skills per agent, MCP server health. | always |
 | `team` | The org chart editor. | always |
 | `log` | The server log. | always |
@@ -220,6 +220,8 @@ marks everything in it as read.
 | The HTTPS certificate could not be renewed or runs out soon | A fresh certificate is loaded. |
 | REM failed three runs in a row for an agent; Deep could not place the same note three times; a Lucid run failed or was cut off | The next run succeeds. |
 | A tool server or a model has been unreachable for a day | It answers again. |
+| A Sentinel check stopped (errors, or its script copy changed) or used up its wakes for the day | The trigger is resumed and checks again, or is deleted. |
+| `subagents.tools.deny` names a tool somora does not have | The entry is fixed. |
 
 One thing is one entry. More failures of the same thing only change
 its `since … · n×` line. An entry that resolved itself stays a day,
@@ -536,7 +538,7 @@ These features have their own pages. In short:
 |---|---|
 | **abilities** | A matrix of tools and skills per agent, plus the health of external MCP servers. A switch takes effect on the agent's next turn. On `codex-cli` the chat shows a `tools changed` marker. |
 | **team** | Drag agents onto their superior, edit titles and rules, and preview the `# Your team` block every agent gets. Saved to `~/.somora/team.yaml`. |
-| **sentinel** | The triggers that wake agents on their own, with history and a test button. |
+| **sentinel** | The triggers that wake agents on their own, with history and a test button. A check trigger also shows its checks and wakes, the last check, the decision model's answer, its script (read only), and a dry run in place. |
 | **browser** | One row per agent window of the shared browser. A row opens the live view with tabs, address bar and take-over buttons. A waiting handoff also shows as an **Open browser** notice in its chat. |
 | **media** | The form for generating images and videos, and the gallery. |
 | **wiki** | The shared wiki in three columns: folder tree, page, links and graph. Read-only. `[[wikilinks]]` are clickable. |

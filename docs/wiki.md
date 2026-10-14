@@ -1,4 +1,4 @@
-# Wiki Layer
+# Wiki
 
 The wiki is the long-term knowledge all your agents share. It is a
 folder of Markdown pages inside your Obsidian vault: one page per

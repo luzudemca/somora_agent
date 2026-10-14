@@ -191,6 +191,25 @@ The shell inherits the server's environment, including what
 unless the agent passes `inherit_agent_env: true`. A script that calls
 somora's API takes the key from `somora key`.
 
+### Sentinel check scripts
+
+An agent with the `sentinel` tool can leave a script behind that the
+server runs on its own, every few seconds to minutes, while nobody
+watches. The script runs as the somora user in the agent's workspace,
+with the skill secrets of the programs it names.
+
+When the trigger is
+created, a shell script is checked against the commands `exec` blocks,
+and a script in any language that restarts, stops or updates somora is
+refused; nothing is checked while it runs, and Python or JavaScript
+scripts are not checked against the `exec` list at all. somora runs a
+copy and checks its fingerprint, so a later edit of the file does not
+change what runs.
+
+Take the tool away with
+`tools.deny: ['sentinel']` where an agent should not leave anything
+running ([Sentinel](sentinel.md#check-triggers)).
+
 ### Files
 
 | Rule | Paths |

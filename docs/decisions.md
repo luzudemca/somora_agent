@@ -15,6 +15,9 @@ choices, or a position on a scale. somora gives agents a tool for it,
   reading each one.
 - **Images, when the model reads them.** An agent can ask "is there a red
   car in this photo?" about a picture it was sent or took itself.
+- **Checks that judge for you.** A Sentinel check trigger can hand
+  what its script fetched to the decision model and wake the agent
+  only when the answer passes a threshold ([Sentinel](sentinel.md#judged-checks)).
 - **No silent cut-offs.** An input over the limit is refused with the
   token count, never evaluated in part.
 
@@ -189,7 +192,7 @@ reference lists the details.
 
 ```yaml
 decisions:
-  model: ""          # the entry in use; empty turns the tool off
+  model: ""          # the entry in use; empty turns the tool and judged checks off
   models: []
 ```
 
@@ -213,5 +216,6 @@ and the questions are not logged.
 - [Image handling](image-handling.md): which image file an agent is shown and which it hands on
 - [Models](models.md): the models somora was run with, decision models included
 - [API](api.md): `POST /decisions/evaluate`
+- [Sentinel](sentinel.md#judged-checks): checks whose data the decision model judges
 - [Tools](tools.md): every tool, and how to switch tools off per agent
 - [Agents](agents.md): the Abilities window and per-agent settings

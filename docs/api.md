@@ -199,7 +199,8 @@ The running version and what the daily update check found.
 What the web client's inbox shows: a newer version, somora.ai's note,
 and conditions that need a person (a broken `config.yaml`, an expired
 login, the certificate, failing dream runs, a tool server or model
-gone for a day).
+gone for a day, a Sentinel check that stopped or used up its wakes for
+the day, a `subagents.tools.deny` entry that names no tool).
 
 ```json
 { "entries": [ { "key": "config", "kind": "config", "level": "important",
@@ -210,7 +211,7 @@ gone for a day).
 
 | Field | Meaning |
 |---|---|
-| `key` | Stable per thing, e.g. `update:<version>`, `news:<hash>`, `config`, `login:claude-cli`, `login:openai-compatible:<provider>`, `login:mcp:<server>`, `tls`, `rem:<agent>`, `deep:<agent>/<slug>`, `lucid`, `mcp:<server>`, `model:<provider/id>`. |
+| `key` | Stable per thing, e.g. `update:<version>`, `news:<hash>`, `config`, `login:claude-cli`, `login:openai-compatible:<provider>`, `login:mcp:<server>`, `tls`, `rem:<agent>`, `deep:<agent>/<slug>`, `lucid`, `mcp:<server>`, `model:<provider/id>`, `sentinel:<triggerId>`, `config:subagents-deny`. |
 | `kind` | `update`, `news`, `config`, `login`, `tls`, `dream`, `mcp`, `model`, `sentinel`. |
 | `level` | `info`, `warning`, `important`. |
 | `title`, `text`, `url?` | Plain text. `url` is `https://` only. |
@@ -1229,9 +1230,17 @@ curl -H "Authorization: Bearer $(somora key)" -X POST $BASE/decisions/evaluate \
 ```
 
 A success is a `200` with the result the decision models page
-describes (`status: "ok"`, `answers`, `usage`). A failure keeps the
-tool's `reason` and `guidance` and adds `error`; the status code
-follows the reason:
+describes (`status: "ok"`, `answers`, `usage`). When the decision
+model could not answer, the response keeps the tool's `reason` and
+`guidance` and adds `error`.
+
+A request somora refuses before asking
+(a body that does not validate, bad base64, an unusable image, over
+24 MB) gets only `error`.
+
+Images are PNG, JPEG or WebP, at most 4 MB
+and 16 megapixels each after scaling and 8 MB together. The status
+code follows the reason:
 
 | Status | Reasons |
 |---|---|
@@ -2962,8 +2971,8 @@ older picture is refused.
 
 ## Sentinel
 
-Sentinel wakes agents on a schedule. These routes list and manage the
-triggers. The same operations are available to agents as the `sentinel`
+Sentinel wakes agents on a schedule, or when a check script sees that
+something happened. These routes list and manage the triggers. The same operations are available to agents as the `sentinel`
 tool.
 
 ### `GET /sentinel/triggers`
@@ -3118,8 +3127,8 @@ curl -H "Authorization: Bearer $KEY" -X POST $BASE/agents/<your-agent>/tools/sen
   }'
 ```
 
-The tool's actions are `create`, `list`, `get`, `pause`, `resume`,
-`delete`, `test`, `history` and `purge_completed`.
+The tool's actions are `create`, `dry_run`, `update`, `list`, `get`,
+`pause`, `resume`, `delete`, `test`, `history` and `purge_completed`.
 
 ## External MCP servers
 

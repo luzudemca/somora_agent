@@ -481,12 +481,9 @@ providers:
 #         input_video: { field: video_url, min: 1, max: 1, maxSeconds: 30 }
 #         character_image: { field: image_url, min: 1, max: 1 }
 #
-#     # ⚠ NOT YET VERIFIED against a live endpoint — somora has had no
-#     # Vertex access to test with. The dialect is written from Google's
-#     # published shape (operation name instead of a job id, POST to poll,
-#     # result inside the poll response) so that adding Veo is a config
-#     # entry rather than a refactor. Do not assume it works until someone
-#     # has run it once.
+#     # Written from Google's published shape (operation name instead of a
+#     # job id, POST to poll, result inside the poll response); not yet run
+#     # against a live Vertex endpoint.
 #     - name: veo
 #       provider: vertex
 #       model: veo-3
@@ -522,7 +519,7 @@ providers:
 #     - slug: firma2
 #       label: Firma Zwei
 
-# Compaction tunables (DECISION #21). All optional — built-in defaults apply
+# Compaction tunables. All optional — built-in defaults apply
 # when omitted. SOMORA_COMPACTION_* env vars override these for ops/CI.
 # compaction:
 #   triggerRatio: 0.8          # compact at 80% of the input budget (window minus the answer)
@@ -570,10 +567,17 @@ providers:
 # Optional per agent: ~/.somora/agents/<name>/VOICE.md replaces the
 # character derived from the persona; the honesty rules always stay.
 
-# Memory-Layer tunables (DECISIONS #25–#27). All optional. Per-agent
-# overrides can live in agent.yaml later. (Phase 2-Stufe-B — not yet
-# wired into the runtime.)
-# Agent-loop tunables (DECISION #31 + #37). Apply to engines that run
+# Sessions started as sub-agents (spawn_subagent) never get these tools,
+# whatever persona and model: same forms as agent.yaml tools.deny (a name,
+# toolset:<family>, prefix*), and they beat every allow. The default takes
+# away agent_ask: a sub's answer reaches its parent on its own. With
+# deny: [] a sub that also reports via agent_ask sends the parent's reply
+# back to the parent as a follow-up (an echo). docs/agents.md.
+# subagents:
+#   tools:
+#     deny: [agent_ask, agent_ask_result, agent_ask_cancel]
+
+# Agent-loop tunables. Apply to engines that run
 # their own tool-call loop — currently openai-compatible — for the per-
 # tool-call race. The longTask* values ALSO inform CLI-engine tools
 # (subagent_result, agent_ask) which run inside MCP children, so all
@@ -588,16 +592,7 @@ providers:
 #
 # When a long-task hits its timeout, the tool returns state:"pending"
 # (NOT an error) — the sub keeps running, the caller can retry with a
-# higher timeout_ms or check status later. See DECISION #37.
-# Sessions started as sub-agents (spawn_subagent) never get these tools,
-# whatever persona and model: same forms as agent.yaml tools.deny (a name,
-# toolset:<family>, prefix*), and they beat every allow. The default takes
-# away agent_ask: a sub's answer reaches its parent on its own. With
-# deny: [] a sub that also reports via agent_ask sends the parent's reply
-# back to the parent as a follow-up (an echo). docs/agents.md.
-# subagents:
-#   tools:
-#     deny: [agent_ask, agent_ask_result, agent_ask_cancel]
+# higher timeout_ms or check status later.
 #
 # agentLoop:
 #   maxRounds: 8                      # max tool-call rounds per turn (1..100).
@@ -908,22 +903,30 @@ providers:
 #   # everything private is refused otherwise.
 #   fetchAllowPrivate: [wiki.home.lan, 10.0.0.0/24]
 
-# Sentinel — proactive trigger runtime (time-based fires that wake
-# agents on a schedule, see docs/sentinel.md). Only knob today is how
-# long completed `at`-triggers (one-shot fires that have already run)
-# linger in the registry before they're garbage-collected.
+# Sentinel — wakes agents on a schedule, or when a check script sees that
+# something happened (docs/sentinel.md). All optional.
 #
-# completedRetentionDays:
-#   Days a `completed` trigger and its history are kept after the
-#   fire's lastFireAt timestamp. The scheduler sweeps at boot and on
-#   each daily re-arm tick; older entries get auto-deleted. Set to 0
-#   to disable GC entirely (manual cleanup only). Default 7.
+# completedRetentionDays: days a fired one-shot (an `at` trigger or a
+#   `once` check) and its history are kept; 0 turns the cleanup off.
+#   Needs a restart.
+# checks: limits for check triggers. A config reload is enough; they
+#   apply from the next check.
 # sentinel:
 #   completedRetentionDays: 7
+#   checks:
+#     minIntervalOnceMs: 15000     # shortest interval of a once check
+#     minIntervalMs: 60000         # shortest interval of a watch check
+#     maxDeadlineMs: 86400000      # a once check's deadline, at most 24 h away
+#     timeoutMs: 30000             # how long one check may run
+#     maxTimeoutMs: 120000         # the most a trigger may set
+#     maxOutputBytes: 65536        # output kept; more is a check error
+#     maxConcurrent: 4             # checks running at once, all triggers
+#     errorStreak: 3               # check errors in a row before it stops
+#     maxWakesPerDay: 24           # wakes per check trigger and UTC day
 
 # External MCP servers (docs/mcp.md). somora connects as MCP client,
 # imports the servers' tools and offers them to every engine next to the
-# built-in tools, namespaced `mcp__<server>__<tool>`. Phase 1 supports
+# built-in tools, namespaced `mcp__<server>__<tool>`. Supported:
 # remote HTTP servers (streamable-http, automatic SSE fallback) with
 # static header auth; header values expand `${VAR}` / `${VAR:-default}`
 # from the server process env at connect time.
