@@ -73,6 +73,13 @@ export async function installCheckScript(
   return { file, lang, sha256: sha256(await readFile(target)) };
 }
 
+/** A new version of a trigger's script: the old copy goes, the state
+ *  folder stays (the script may keep what it has seen). */
+export async function replaceCheckScript(id: string, sourcePath: string): Promise<{ file: string; lang: CheckScriptLang; sha256: string }> {
+  await rm(checkScriptDir(id), { recursive: true, force: true });
+  return installCheckScript(id, sourcePath);
+}
+
 /** The script's text when it still matches its fingerprint, else why not. */
 export async function readCheckScript(id: string, file: string, expected: string): Promise<{ ok: true; path: string; text: string } | { ok: false; error: string }> {
   const path = join(checkScriptDir(id), file);

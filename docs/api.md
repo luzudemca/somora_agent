@@ -2989,6 +2989,19 @@ All triggers, newest first.
       "errorStreak": 0, "nextFireAt": "2026-05-18T08:00:00.000Z" } ] }
 ```
 
+A check trigger (docs/sentinel.md, Check triggers) has a `check` source
+and an evaluator of `ready`, or `decision` for a judged check:
+
+```json
+{ "source": { "type": "check", "description": "the model server answers on glm",
+              "interval": "15s", "mode": "once", "deadline": "2026-05-17T13:00:00.000Z",
+              "script": { "file": "check.py", "lang": "python", "sha256": "…" } },
+  "evaluator": { "type": "ready" } }
+```
+
+A check trigger has no `nextFireAt`; its counts and next check are in
+the check state, which the `sentinel` tool's `get` returns.
+
 ### `GET /sentinel/triggers/:id`
 
 One trigger as `{trigger}`.
@@ -3012,6 +3025,10 @@ The fires of a trigger, newest first. `?limit=N`, default 50, at most
 | `success` | `taskId` |
 | `error` | `error`. `stopped by the user` when a person stopped the turn. |
 | `skipped` | `skipReason`. `removed from the queue by the user` when a person removed the waiting fire. |
+| `updated` | `note`: what changed and by whom. A check trigger's new script or settings, not a fire. |
+
+A check trigger that stops records an `error` entry starting with
+`check paused:`.
 
 `catchUp: true` marks a fire made up for after a restart, `testMode:
 true` one started through the test route. `404` once the trigger is
@@ -3031,6 +3048,11 @@ computed.
 
 Fires a trigger now, ignoring cooldown and daily cap. The agent gets
 the same prompt as on a real fire. Returns `{ok: true, hint}`.
+
+For a check trigger it runs the script copy once instead (a dry run):
+nothing is saved, nobody is woken, the script's state folder is not
+touched. Returns `{ok, dryRun: {ok, art, ms, answer?, error?,
+errorClass?, stderr?, decision?, verdict}}`.
 
 ### `DELETE /sentinel/triggers/:id`
 

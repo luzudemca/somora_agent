@@ -12,8 +12,14 @@
 // breach.
 
 import { z } from 'zod';
+import { activeDecisionModel, type Config } from '../../config/types.ts';
 import { logger } from '../../server/logger.ts';
-import type { ToolDefinition } from '../types.ts';
+import { buildCheckSource, validateCheckInput, type CheckSpecInput } from '../../sentinel/check-create.ts';
+import { dryRunCheck, hasRecentDryRun, recordDryRun } from '../../sentinel/check-dry-run.ts';
+import { initialCheckState } from '../../sentinel/check-logic.ts';
+import { installCheckScript, loadCheckState, removeCheckFiles, replaceCheckScript, saveCheckState } from '../../sentinel/check-store.ts';
+import { checkReadAllowed, realpathSafeAncestor, resolveLocalPath } from '../file/policy.ts';
+import type { ToolContext, ToolDefinition } from '../types.ts';
 import {
   deleteTrigger,
   getHistory,
@@ -22,6 +28,7 @@ import {
   loadTriggers,
   saveTrigger,
   countTriggersByAgent,
+  recordFire,
 } from '../../sentinel/store.ts';
 import {
   dispatchTestFire,
@@ -35,7 +42,8 @@ import {
 } from '../../sentinel/schedule.ts';
 import {
   SENTINEL_LIMITS,
-  type Source,
+  type CheckSource,
+  type Evaluator,
   type Trigger,
   type TriggerStatus,
 } from '../../sentinel/types.ts';
@@ -62,10 +70,28 @@ const TimeSpecSchema = z.union([
   z.object({ type: z.literal('cron'), expression: z.string() }),
 ]);
 
-const SourceSchema = z.object({
+const TimeSourceSchema = z.object({
   type: z.literal('time'),
   spec: TimeSpecSchema,
 });
+
+// Phase 2: a script checks before the agent is woken (src/sentinel/check-*.ts).
+const CheckSourceSchema = z
+  .object({
+    type: z.literal('check'),
+    script: z.string().min(1),
+    description: z.string().min(1).max(300),
+    mode: z.enum(['once', 'watch']),
+    interval: z.string().min(1),
+    deadline: z.string().min(1).optional(),
+    timeoutMs: z.number().int().optional(),
+    notifyOnFirst: z.boolean().optional(),
+    decision: z.object({ questions: z.record(z.string(), z.unknown()), wake: z.record(z.string(), z.unknown()) }).strict().optional(),
+  })
+  .strict();
+type CheckSourceInputT = z.infer<typeof CheckSourceSchema>;
+
+const SourceSchema = z.discriminatedUnion('type', [TimeSourceSchema, CheckSourceSchema]);
 
 const DispatchSchema = z.object({
   agent: z.string().min(1),
@@ -84,7 +110,7 @@ const PolicySchema = z.object({
 const SentinelInput = z
   .object({
     action: z.enum([
-      'create', 'list', 'get', 'pause', 'resume', 'delete', 'test', 'history', 'purge_completed',
+      'create', 'dry_run', 'update', 'list', 'get', 'pause', 'resume', 'delete', 'test', 'history', 'purge_completed',
     ]),
     // create
     name: z.string().min(1).max(100).optional(),
@@ -92,6 +118,8 @@ const SentinelInput = z
     source: SourceSchema.optional(),
     dispatch: DispatchSchema.optional(),
     policy: PolicySchema.optional(),
+    // update
+    prompt: z.string().min(1).optional(),
     // get / pause / resume / delete / test / history
     id: z.string().min(1).optional(),
     // list (owner also filters purge_completed)
@@ -127,7 +155,8 @@ type SentinelResult =
   | { action: 'pause' | 'resume' | 'delete'; ok: boolean; id: string; error?: string }
   | { action: 'test'; ok: boolean; id: string; hint?: string; error?: string }
   | { action: 'history'; ok: true; id: string; count: number; entries: Awaited<ReturnType<typeof getHistory>> }
-  | { action: 'history'; ok: false; id: string; error: string };
+  | { action: 'history'; ok: false; id: string; error: string }
+  | { action: 'dry_run' | 'update' | 'test'; ok: boolean; id?: string; error?: string; [k: string]: unknown };
 
 interface TriggerSummary {
   id: string;
@@ -145,7 +174,7 @@ function summarize(t: Trigger): TriggerSummary {
     id: t.id,
     name: t.name,
     ownerAgent: t.ownerAgent,
-    source: t.source.type === 'time' ? describeTimeSpec(t.source.spec) : t.source.type,
+    source: describeSource(t),
     status: t.status,
     ...(t.nextFireAt ? { nextFireAt: t.nextFireAt } : {}),
     ...(t.lastFireAt ? { lastFireAt: t.lastFireAt } : {}),
@@ -177,7 +206,39 @@ function validateCreateInput(input: SentinelInputT): { ok: true; data: Required<
   return { ok: true, data: { name: input.name, source: input.source, dispatch: input.dispatch } };
 }
 
-function enforceLimits(source: Source, policy?: SentinelInputT['policy']): string | null {
+function describeSource(t: Pick<Trigger, 'source' | 'evaluator'>): string {
+  const s = t.source;
+  if (s.type === 'time') return describeTimeSpec(s.spec);
+  return `check ${s.mode}, every ${s.interval}${s.deadline ? ` until ${s.deadline}` : ''}${t.evaluator?.type === 'decision' ? ', judged by the decision model' : ''}`;
+}
+
+/** The agent's script path → an absolute path it may read, plus the
+ *  settings in the shape check-create.ts checks. */
+async function resolveCheckInput(src: CheckSourceInputT, ctx: ToolContext): Promise<{ ok: true; input: CheckSpecInput } | { ok: false; error: string }> {
+  const { absolute } = await resolveLocalPath(src.script, ctx.agent, ctx.config, ctx.session);
+  for (const candidate of [absolute, await realpathSafeAncestor(absolute)]) {
+    const verdict = checkReadAllowed(candidate);
+    if (!verdict.ok) return { ok: false, error: `script: ${verdict.reason}` };
+  }
+  return {
+    ok: true,
+    input: {
+      description: src.description,
+      scriptPath: absolute,
+      mode: src.mode,
+      interval: src.interval,
+      ...(src.deadline !== undefined ? { deadline: src.deadline } : {}),
+      ...(src.timeoutMs !== undefined ? { timeoutMs: src.timeoutMs } : {}),
+      ...(src.notifyOnFirst !== undefined ? { notifyOnFirst: src.notifyOnFirst } : {}),
+      ...(src.decision ? { decision: src.decision } : {}),
+    },
+  };
+}
+
+const NO_DRY_RUN =
+  'no successful dry run of this script (as the file is now) in the last 2 h. Run sentinel({action:"dry_run", source}) with the same source first — it runs the script once and shows what would happen; nothing is saved.';
+
+function enforceLimits(source: NonNullable<SentinelInputT['source']>, policy?: SentinelInputT['policy']): string | null {
   if (source.type !== 'time') return null;
   const spec = source.spec;
   // Minimum-interval enforcement: 'every' triggers can't be < 60s.
@@ -203,33 +264,49 @@ function enforceLimits(source: Source, policy?: SentinelInputT['policy']): strin
 // Tool
 // ─────────────────────────────────────────────────────────────────────
 
-export const sentinel: ToolDefinition<SentinelInputT, SentinelResult> = {
-  name: 'sentinel',
-  toolset: 'sentinel',
-  description:
-    'Install and manage TIME-based proactive triggers that wake an agent on a schedule. Use this ' +
-    'when the user says things like "erinner mich morgen 10 Uhr", "check meine mails jeden morgen ' +
-    '8 Uhr", "scan einmal die woche…", "wenn etwas in X passiert, lass mich Y machen" (where Y ' +
-    'is recurring/scheduled — for HTTP/exec event sources see Phase 2). ' +
-    '\n\n' +
-    'Triggers fire by sending the dispatched agent a turn with a structured [Sentinel trigger ' +
-    'fired] evidence-block prefix so the agent knows it was woken (not user-asked) and has full ' +
-    'context: trigger name, source, fire-time, original user intent. ' +
-    '\n\n' +
-    'Actions: ' +
-    '"create" (name + source + dispatch + optional policy → registered trigger), ' +
+/** The kinds of trigger and when to use which — the decision aid of
+ *  private/sentinel-phase2/KONZEPT.md §9c. Art 2 (judged checks) only
+ *  appears when a decision model is configured. */
+function sentinelDescription(art2: boolean, limits: Config['sentinel']['checks']): string {
+  const s = (ms: number) => (ms % 60_000 === 0 ? `${ms / 60_000} min` : `${ms / 1000} s`);
+  return (
+    'Install and manage triggers that wake an agent later — instead of waiting, sleeping or polling inside a turn. ' +
+    'A woken agent gets a turn with a [Sentinel trigger fired] block (what fired and why) and the trigger\'s prompt.' +
+    '\n\nWhich kind fits:\n' +
+    '- TIME (source.type "time"): something should happen at a time — "remind me tomorrow at 9", "report every Monday".\n' +
+    `- CHECK, once (source.type "check", mode "once"): wait for an event a small script can check for certain — "tell me when the model switch is done", "when the build has passed". The script prints {"ready": true|false}; you are woken on the first ready: true, or once at the deadline (required, at most ${Math.round(limits.maxDeadlineMs / 3_600_000)} h) with the last state. Interval from ${s(limits.minIntervalOnceMs)}.\n` +
+    `- CHECK, watch (mode "watch"): watch a clear condition — "when BTC drops below 50,000". Wakes on each change from ready: false to true, not on every positive check. Interval from ${s(limits.minIntervalMs)}.\n` +
+    (art2
+      ? '- JUDGED CHECK (a check with "decision"): watch something that needs judgement — "when a mail arrives that needs an answer today", "when there is news about X". The script prints {"data": …}; the decision model answers your question about the data and wakes you above your threshold. Usually mode "watch".\n'
+      : '') +
+    '- No trigger: when you can do it now, or nobody asked to be told later.' +
+    '\n\nCheck scripts: one file in your workspace — .sh (bash), .py (python3), .js/.mjs (node). They only observe: read a status, fetch data; actions belong in your woken turn. ' +
+    'Print ONE JSON object on stdout: {"ready": true|false, "summary": "short, for you", "data": {…}}' +
+    (art2 ? ' — a judged check prints {"data": …, "summary": "…"}' : '') +
+    '. {"final": "failed", "summary": "…"} when it can never happen (wakes at once, ends the trigger). Exit 0 means the check ran; a non-zero exit, other output or a timeout is a check error — never a wake, three in a row pause the trigger. ' +
+    '$SOMORA_SENTINEL_STATE_DIR is the script\'s own folder for remembering things between runs. ' +
+    (art2
+      ? 'A judged script must print only items that are NEW since its last run (remember what it printed in the state folder) and nothing that changes on every run (no timestamps, counters) — otherwise old items are judged again and wake you again. '
+      : '') +
+    'Templates: docs/sentinel.md.' +
+    '\n\nSteps for a check: write the script → action "dry_run" with the exact source you will create (runs it once, shows what would happen; required, nothing saved, nobody woken) → "create" with the same source, a name and dispatch.prompt: what to do when woken. ' +
+    '"update" (id + source / prompt / name) swaps the script or settings; a new script needs a dry run first. "test" on a check trigger dry-runs its script.' +
+    '\n\nActions: ' +
+    '"create" (name + source + dispatch + optional policy), ' +
+    '"dry_run" (source of type "check"), ' +
+    '"update" (id + any of source, prompt, name, intent), ' +
     '"list" (optional owner / status filter; fired one-shots are hidden unless status:"completed" ' +
     'or include_completed:true — the count is reported as hidden_completed), ' +
-    '"get" (full detail by id), ' +
+    '"get" (full detail by id; for a check also its counts and last check), ' +
     '"pause" / "resume" (toggle active/paused by id), ' +
     '"delete" (remove + clean history), ' +
-    '"test" (fire NOW, bypass cooldown/cap, mark as testMode in history), ' +
-    '"history" (last N fire-events for a trigger), ' +
+    '"test" (time trigger: fire NOW, bypassing cooldown/cap; check trigger: dry-run its script), ' +
+    '"history" (last N events for a trigger), ' +
     '"purge_completed" (delete ALL fired one-shots at once, optional owner filter — recurring, ' +
     'active, paused and errored triggers are never touched). Fired one-shots are also ' +
     'auto-deleted after sentinel.completedRetentionDays (default 7). ' +
     '\n\n' +
-    'Source variants (all under type:"time"): ' +
+    'Time source variants (source.spec): ' +
     '`at` (one-shot ISO timestamp), `every` (interval like "5m", min 60s), `daily` ("08:00"), ' +
     '`weekly` (mon/tue/…/sun + "09:00"), `cron` (standard 5-field — escape hatch for things ' +
     'like "1st of each month"). Cron examples: `"0 9 1 * *"` (monthly 1st 9:00), ' +
@@ -237,37 +314,77 @@ export const sentinel: ToolDefinition<SentinelInputT, SentinelResult> = {
     'ranges (use `1,2,3,4,5` not `1-5`) or named months/weekdays. Prefer the named ' +
     'primitives when they fit — they read better. ' +
     '\n\n' +
-    'Safeguards: minimum interval 60s (no sub-minute polling), max 50 active triggers per agent, ' +
-    'max 500 fires per trigger per day (auto-pause when hit), 3-strikes auto-pause on consecutive ' +
-    'errors. Visible + manageable in the web-UI sentinel tab.',
-  inputSchema: SentinelInput,
-  jsonSchema: {
+    `Safeguards: max 50 active triggers per agent, max 500 fires per trigger per day, ${limits.maxWakesPerDay} wakes per check trigger per day, ` +
+    'auto-pause after 3 errors in a row. Visible and manageable in the web client\'s Sentinel window.'
+  );
+}
+
+function sentinelJsonSchema(art2: boolean): Record<string, unknown> {
+  const checkSource: Record<string, unknown> = {
+    type: 'object',
+    properties: {
+      type: { const: 'check' },
+      script: { type: 'string', description: 'Path of your script (.sh, .py, .js/.mjs), relative to your workspace or absolute. somora copies it at creation — editing the file later changes nothing; use update.' },
+      description: { type: 'string', maxLength: 300, description: 'What the check watches, in a few words ("the model server answers on glm"). Shown in every wake.' },
+      mode: { type: 'string', enum: ['once', 'watch'], description: 'once: wake on the first positive check, then done (deadline required). watch: keep checking, wake on each change.' },
+      interval: { type: 'string', description: 'Between two checks: "15s", "5m", "1h".' },
+      deadline: { type: 'string', description: 'once only, required: ISO time or a duration from now ("2h").' },
+      timeoutMs: { type: 'integer', description: 'Time one run may take (default 30000).' },
+      notifyOnFirst: { type: 'boolean', description: 'watch only: the first check may wake too (default: it only records the starting state).' },
+      ...(art2
+        ? {
+            decision: {
+              type: 'object',
+              description: 'Judged check: the decision model reads the script\'s data. questions: as for decision_evaluate ({id: {type: "boolean"|"choice"|"score", instructions, criteria}}). wake: the rule that wakes you.',
+              properties: {
+                questions: { type: 'object', description: 'e.g. {"urgent": {"type": "boolean", "instructions": "Does any of these mails need an answer today?"}}' },
+                wake: {
+                  oneOf: [
+                    { type: 'object', properties: { question: { type: 'string' }, minProbability: { type: 'number', minimum: 0, maximum: 1 } }, required: ['question', 'minProbability'], description: 'boolean question: wake when the probability of yes ≥ minProbability (e.g. 0.8)' },
+                    { type: 'object', properties: { question: { type: 'string' }, choice: { type: 'string' }, minConfidence: { type: 'number', minimum: 0, maximum: 1 } }, required: ['question', 'choice'], description: 'choice question: wake when this choice is picked (or its probability ≥ minConfidence)' },
+                    { type: 'object', properties: { question: { type: 'string' }, minScore: { type: 'integer', minimum: 1 } }, required: ['question', 'minScore'], description: 'score question: wake when the score ≥ minScore' },
+                  ],
+                },
+              },
+              required: ['questions', 'wake'],
+            },
+          }
+        : {}),
+    },
+    required: ['type', 'script', 'description', 'mode', 'interval'],
+  };
+  return {
     type: 'object',
     properties: {
       action: {
         type: 'string',
-        enum: ['create', 'list', 'get', 'pause', 'resume', 'delete', 'test', 'history', 'purge_completed'],
+        enum: ['create', 'dry_run', 'update', 'list', 'get', 'pause', 'resume', 'delete', 'test', 'history', 'purge_completed'],
       },
       // create
-      name: { type: 'string', maxLength: 100, description: 'create only — human label.' },
-      intent: { type: 'string', maxLength: 500, description: 'create only — short user-intent summary echoed to the agent at fire-time.' },
+      name: { type: 'string', maxLength: 100, description: 'create / update — human label.' },
+      intent: { type: 'string', maxLength: 500, description: 'create / update — short user-intent summary echoed to the agent at fire-time.' },
       source: {
-        type: 'object',
-        description: 'create only — where events come from. Phase 1: type:"time" with one of the spec variants.',
-        properties: {
-          type: { type: 'string', enum: ['time'] },
-          spec: {
-            description: 'Discriminated by spec.type. See examples.',
-            oneOf: [
-              { type: 'object', properties: { type: { const: 'at' }, iso: { type: 'string' } }, required: ['type', 'iso'] },
-              { type: 'object', properties: { type: { const: 'every' }, interval: { type: 'string', description: '30s / 5m / 1h. Minimum 60s.' } }, required: ['type', 'interval'] },
-              { type: 'object', properties: { type: { const: 'daily' }, time: { type: 'string', description: 'HH:MM or HH:MM:SS.' } }, required: ['type', 'time'] },
-              { type: 'object', properties: { type: { const: 'weekly' }, day: { type: 'string', enum: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] }, time: { type: 'string' } }, required: ['type', 'day', 'time'] },
-              { type: 'object', properties: { type: { const: 'cron' }, expression: { type: 'string', description: 'Standard 5-field cron: m h dom mon dow. Supports *, N, */N, a,b,c. Does NOT support ranges (use 1,2,3,4,5 instead of 1-5) or named months/weekdays (use 1=Mon..7=Sun). Examples: "0 8 * * *" daily at 8:00 · "0 9 1 * *" 1st of each month 9:00 · "*/15 * * * *" every 15 min · "0 9,17 * * *" 9:00 AND 17:00 daily · "0 0 * * 0" sundays midnight. For simple cases prefer `daily`/`weekly`/`every` — they read better and cover 90% of recurring use-cases.' } }, required: ['type', 'expression'] },
-            ],
+        description: 'create / dry_run / update — where wake-ups come from: a time, or a check script.',
+        oneOf: [
+          {
+            type: 'object',
+            properties: {
+              type: { const: 'time' },
+              spec: {
+                description: 'Discriminated by spec.type. See examples.',
+                oneOf: [
+                  { type: 'object', properties: { type: { const: 'at' }, iso: { type: 'string' } }, required: ['type', 'iso'] },
+                  { type: 'object', properties: { type: { const: 'every' }, interval: { type: 'string', description: '30s / 5m / 1h. Minimum 60s.' } }, required: ['type', 'interval'] },
+                  { type: 'object', properties: { type: { const: 'daily' }, time: { type: 'string', description: 'HH:MM or HH:MM:SS.' } }, required: ['type', 'time'] },
+                  { type: 'object', properties: { type: { const: 'weekly' }, day: { type: 'string', enum: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] }, time: { type: 'string' } }, required: ['type', 'day', 'time'] },
+                  { type: 'object', properties: { type: { const: 'cron' }, expression: { type: 'string', description: 'Standard 5-field cron: m h dom mon dow. Supports *, N, */N, a,b,c. Does NOT support ranges (use 1,2,3,4,5 instead of 1-5) or named months/weekdays (use 1=Mon..7=Sun). Examples: "0 8 * * *" daily at 8:00 · "0 9 1 * *" 1st of each month 9:00 · "*/15 * * * *" every 15 min · "0 9,17 * * *" 9:00 AND 17:00 daily · "0 0 * * 0" sundays midnight. For simple cases prefer `daily`/`weekly`/`every` — they read better and cover 90% of recurring use-cases.' } }, required: ['type', 'expression'] },
+                ],
+              },
+            },
+            required: ['type', 'spec'],
           },
-        },
-        required: ['type', 'spec'],
+          checkSource,
+        ],
       },
       dispatch: {
         type: 'object',
@@ -307,8 +424,9 @@ export const sentinel: ToolDefinition<SentinelInputT, SentinelResult> = {
           },
         },
       },
-      // get / pause / resume / delete / test / history
-      id: { type: 'string', description: 'Trigger id — required for get/pause/resume/delete/test/history.' },
+      prompt: { type: 'string', description: 'update only — the new dispatch prompt.' },
+      // get / pause / resume / delete / test / history / update
+      id: { type: 'string', description: 'Trigger id — required for get/pause/resume/delete/test/history/update.' },
       // list
       owner: { type: 'string', description: 'list / purge_completed — filter by owner-agent.' },
       status: { type: 'string', enum: ['active', 'paused', 'error', 'completed'], description: 'list only — filter by status.' },
@@ -317,8 +435,36 @@ export const sentinel: ToolDefinition<SentinelInputT, SentinelResult> = {
     },
     required: ['action'],
     additionalProperties: false,
+  };
+}
+
+const DEFAULT_CHECK_LIMITS: Config['sentinel']['checks'] = {
+  minIntervalOnceMs: 15_000,
+  minIntervalMs: 60_000,
+  maxDeadlineMs: 86_400_000,
+  timeoutMs: 30_000,
+  maxTimeoutMs: 120_000,
+  maxOutputBytes: 65_536,
+  maxConcurrent: 4,
+  errorStreak: 3,
+  maxWakesPerDay: 24,
+};
+
+export const sentinel: ToolDefinition<SentinelInputT, SentinelResult> = {
+  name: 'sentinel',
+  toolset: 'sentinel',
+  description: sentinelDescription(false, DEFAULT_CHECK_LIMITS),
+  inputSchema: SentinelInput,
+  jsonSchema: sentinelJsonSchema(false),
+  forContext: (ctx) => {
+    const art2 = activeDecisionModel(ctx.config) !== null;
+    const limits = ctx.config.sentinel?.checks ?? DEFAULT_CHECK_LIMITS;
+    return { description: sentinelDescription(art2, limits), jsonSchema: sentinelJsonSchema(art2) };
   },
   defaultTimeoutMs: 15_000,
+  // A dry run (or a check trigger's test) runs the script and maybe asks
+  // the decision model: up to the check's time limit plus the model's.
+  timeoutFromInput: (input) => (input.action === 'dry_run' || input.action === 'test' ? 260_000 : undefined),
   async handler(input, ctx): Promise<SentinelResult> {
     // Make sure cache is fresh — cheap on subsequent calls within
     // the same process.
@@ -350,11 +496,13 @@ export const sentinel: ToolDefinition<SentinelInputT, SentinelResult> = {
 
         // Compute next-fire upfront so list/UI immediately shows it.
         let nextFireAt: string | undefined;
-        try {
-          const next = computeNextFire(source.spec);
-          if (next) nextFireAt = next.toISOString();
-        } catch (err) {
-          return { action: 'create', ok: false, error: `unschedulable: ${(err as Error).message}` };
+        if (source.type === 'time') {
+          try {
+            const next = computeNextFire(source.spec);
+            if (next) nextFireAt = next.toISOString();
+          } catch (err) {
+            return { action: 'create', ok: false, error: `unschedulable: ${(err as Error).message}` };
+          }
         }
 
         // Where it fires. "current" is the caller's own session — the
@@ -403,13 +551,33 @@ export const sentinel: ToolDefinition<SentinelInputT, SentinelResult> = {
           dispatchSession = ctx.session;
         }
 
+        const id = newTriggerId(name);
+        // A check: validated, dry-run before (required), copied now.
+        let check: { source: CheckSource; evaluator: Evaluator } | undefined;
+        if (source.type === 'check') {
+          const r = await resolveCheckInput(source, ctx);
+          if (!r.ok) return { action: 'create', ok: false, error: r.error };
+          const v = await validateCheckInput(r.input, ctx.config);
+          if (!v.ok) return { action: 'create', ok: false, error: v.error };
+          if (!(await hasRecentDryRun(ctx.agent, v.sha256, v.evaluator.type === 'decision' ? 2 : 1))) {
+            return { action: 'create', ok: false, error: NO_DRY_RUN };
+          }
+          const script = await installCheckScript(id, r.input.scriptPath);
+          if (script.sha256 !== v.sha256) {
+            await removeCheckFiles(id);
+            return { action: 'create', ok: false, error: `the script changed while the trigger was created — ${NO_DRY_RUN}` };
+          }
+          await saveCheckState({ ...initialCheckState(id, new Date()), nextCheckAt: new Date().toISOString() });
+          check = { source: buildCheckSource(r.input, v.deadline, script), evaluator: v.evaluator };
+        }
+
         const trigger: Trigger = {
-          id: newTriggerId(name),
+          id,
           name,
           ...(input.intent ? { intent: input.intent } : {}),
           ownerAgent,
-          source,
-          evaluator: { type: 'none' },
+          source: check?.source ?? (source as Trigger['source']),
+          evaluator: check?.evaluator ?? { type: 'none' },
           dispatch: {
             agent: dispatch.agent,
             session: dispatchSession,
@@ -429,9 +597,25 @@ export const sentinel: ToolDefinition<SentinelInputT, SentinelResult> = {
           triggerId: trigger.id,
           ownerAgent,
           dispatchAgent: dispatch.agent,
-          source: trigger.source.type === 'time' ? describeTimeSpec(trigger.source.spec) : trigger.source.type,
+          source: describeSource(trigger),
           nextFireAt,
         });
+        if (check) {
+          const s = check.source;
+          return {
+            action: 'create',
+            ok: true,
+            trigger,
+            ...(sessionNote ? { session_note: sessionNote } : {}),
+            hint:
+              (sessionNote ? `${sessionNote} ` : '') +
+              `Check '${trigger.id}' active: the first check runs now, then every ${s.interval}` +
+              (s.mode === 'once'
+                ? ` until ${s.deadline}. You are woken once — on the first ${check.evaluator.type === 'decision' ? 'data the decision model rates above your threshold' : 'ready: true'}, or at the deadline with the last state.`
+                : `. ${s.notifyOnFirst ? 'The first check may wake you; after that you' : 'The first check only records the starting state; you'} are woken on ${check.evaluator.type === 'decision' ? 'new data the decision model rates above your threshold' : 'each change from ready: false to true'}.`) +
+              ` Nothing to do until then — do not poll it yourself. sentinel({action:"get", id:"${trigger.id}"}) shows the last check.`,
+          };
+        }
         return {
           action: 'create',
           ok: true,
@@ -443,6 +627,77 @@ export const sentinel: ToolDefinition<SentinelInputT, SentinelResult> = {
               ? `Trigger '${trigger.id}' active. Next fire at ${nextFireAt}. ` +
                 `Use sentinel({action:"test", id:"${trigger.id}"}) to fire now (bypasses cooldown).`
               : `Trigger '${trigger.id}' created — but no future fire computed (one-shot moment already past?).`),
+        };
+      }
+
+      case 'dry_run': {
+        if (!input.source || input.source.type !== 'check') {
+          return { action: 'dry_run', ok: false, error: 'dry_run needs source: {type: "check", …} — the same source you will pass to create' };
+        }
+        const r = await resolveCheckInput(input.source, ctx);
+        if (!r.ok) return { action: 'dry_run', ok: false, error: r.error };
+        const v = await validateCheckInput(r.input, ctx.config);
+        if (!v.ok) return { action: 'dry_run', ok: false, error: v.error };
+        const report = await dryRunCheck({
+          agent: input.dispatch?.agent ?? ctx.agent,
+          source: { mode: r.input.mode, ...(r.input.notifyOnFirst ? { notifyOnFirst: true } : {}), ...(r.input.timeoutMs !== undefined ? { timeoutMs: r.input.timeoutMs } : {}) },
+          evaluator: v.evaluator,
+          config: ctx.config,
+          scriptPath: r.input.scriptPath,
+        });
+        const { sha, ...rest } = report;
+        if (report.ok && sha === v.sha256) await recordDryRun(ctx.agent, v.sha256, report.art);
+        logger.info({ msg: 'sentinel.tool.dry_run', agent: ctx.agent, ok: report.ok, art: report.art, ms: report.ms, ...(report.error ? { error: report.error.slice(0, 200) } : {}) });
+        return {
+          action: 'dry_run',
+          ...rest,
+          next: report.ok
+            ? 'If that is what you expect, create the trigger with the same source plus name and dispatch.prompt (what to do when woken). Change the script → dry-run again.'
+            : 'Fix the script and dry-run again (run it by hand with exec to see more).',
+        };
+      }
+
+      case 'update': {
+        if (!input.id) return { action: 'update', ok: false, error: 'update: id required' };
+        const t = getTrigger(input.id);
+        if (!t) return { action: 'update', ok: false, id: input.id, error: `trigger '${input.id}' not found` };
+        const changed: string[] = [];
+        let updated: Trigger = { ...t };
+        if (input.name) { updated.name = input.name; changed.push('name'); }
+        if (input.intent !== undefined) { updated.intent = input.intent; changed.push('intent'); }
+        if (input.prompt) { updated.dispatch = { ...t.dispatch, prompt: input.prompt }; changed.push('prompt'); }
+        if (input.source) {
+          if (input.source.type !== 'check' || t.source.type !== 'check') {
+            return { action: 'update', ok: false, id: t.id, error: 'update changes the source of a check trigger only — for a time trigger, create a new one and delete the old' };
+          }
+          const r = await resolveCheckInput(input.source, ctx);
+          if (!r.ok) return { action: 'update', ok: false, id: t.id, error: r.error };
+          const v = await validateCheckInput(r.input, ctx.config);
+          if (!v.ok) return { action: 'update', ok: false, id: t.id, error: v.error };
+          const scriptChanged = v.sha256 !== t.source.script.sha256;
+          const artChanged = v.evaluator.type !== (t.evaluator?.type === 'decision' ? 'decision' : 'ready');
+          if ((scriptChanged || artChanged) && !(await hasRecentDryRun(ctx.agent, v.sha256, v.evaluator.type === 'decision' ? 2 : 1))) {
+            return { action: 'update', ok: false, id: t.id, error: NO_DRY_RUN };
+          }
+          const script = scriptChanged ? await replaceCheckScript(t.id, r.input.scriptPath) : t.source.script;
+          updated = { ...updated, source: buildCheckSource(r.input, v.deadline, script), evaluator: v.evaluator };
+          // A fresh start: new starting state, new deadline; today's wakes still count.
+          const old = await loadCheckState(t.id);
+          await saveCheckState({ ...initialCheckState(t.id, new Date()), nextCheckAt: new Date().toISOString(), ...(old?.wakesToday ? { wakesToday: old.wakesToday } : {}) });
+          changed.push(scriptChanged ? 'script' : 'check settings');
+        }
+        if (changed.length === 0) return { action: 'update', ok: false, id: t.id, error: 'nothing to update — pass name, intent, prompt or source' };
+        await saveTrigger(updated);
+        const now = new Date().toISOString();
+        await recordFire(t.id, { firedAt: now, scheduledFor: now, outcome: 'updated', note: `${changed.join(', ')} by ${ctx.agent}` });
+        reschedule();
+        logger.info({ msg: 'sentinel.tool.update', triggerId: t.id, by: ctx.agent, changed });
+        return {
+          action: 'update',
+          ok: true,
+          id: t.id,
+          changed,
+          ...(t.status !== 'active' ? { hint: `The trigger is ${t.status} — resume it to start checking again.` } : {}),
         };
       }
 
@@ -492,11 +747,24 @@ export const sentinel: ToolDefinition<SentinelInputT, SentinelResult> = {
         if (!input.id) return { action: 'get', ok: false, error: 'get: id required' };
         const t = getTrigger(input.id);
         if (!t) return { action: 'get', ok: false, error: `trigger '${input.id}' not found` };
+        const checkState = t.source.type === 'check' ? await loadCheckState(t.id) : null;
         return {
           action: 'get',
           ok: true,
           trigger: t,
-          describe: t.source.type === 'time' ? describeTimeSpec(t.source.spec) : t.source.type,
+          describe: describeSource(t),
+          ...(checkState
+            ? {
+                check: {
+                  checks: checkState.checkCount,
+                  wakes: checkState.wakeCount,
+                  ...(checkState.nextCheckAt && t.status === 'active' ? { nextCheckAt: checkState.nextCheckAt } : {}),
+                  ...(checkState.last ? { last: checkState.last } : {}),
+                  ...(checkState.lastDecision ? { lastDecision: checkState.lastDecision } : {}),
+                  ...(checkState.errorStreak ? { errorsInARow: checkState.errorStreak } : {}),
+                },
+              }
+            : {}),
         };
       }
 
@@ -548,6 +816,13 @@ export const sentinel: ToolDefinition<SentinelInputT, SentinelResult> = {
         if (!input.id) return { action: 'test', ok: false, id: '', error: 'test: id required' };
         const t = getTrigger(input.id);
         if (!t) return { action: 'test', ok: false, id: input.id, error: `trigger '${input.id}' not found` };
+        if (t.source.type === 'check') {
+          // A check trigger's test is a dry run of its copy: nothing is
+          // saved, nobody is woken, its state folder is not touched.
+          const report = await dryRunCheck({ agent: t.dispatch.agent, source: t.source, evaluator: t.evaluator ?? { type: 'ready' }, config: ctx.config, installed: t });
+          const { sha: _sha, ...rest } = report;
+          return { action: 'test', id: t.id, ...rest };
+        }
         // Fire NOW, bypassing cooldown and daily-cap. dispatchTestFire
         // routes via the main server's HTTP endpoint when this tool
         // runs inside an MCP-child (claude-cli / codex-cli engines) —

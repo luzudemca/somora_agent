@@ -1543,7 +1543,8 @@ export interface SentinelTrigger {
 export interface SentinelFireEntry {
   firedAt: string;
   scheduledFor: string;
-  outcome: 'success' | 'error' | 'skipped';
+  outcome: 'success' | 'error' | 'skipped' | 'updated';
+  note?: string;
   skipReason?: string;
   error?: string;
   taskId?: string;

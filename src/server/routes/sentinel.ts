@@ -6,6 +6,8 @@ import type { Hono } from 'hono';
 import * as sentinelSchedule from '../../sentinel/schedule.ts';
 import * as sentinelScheduler from '../../sentinel/scheduler.ts';
 import * as sentinelStore from '../../sentinel/store.ts';
+import { dryRunCheck } from '../../sentinel/check-dry-run.ts';
+import { config } from '../server-state.ts';
 
 export function registerSentinelRoutes(app: Hono): void {
   // ─────────────────────────────────────────────────────────────────────
@@ -86,6 +88,12 @@ export function registerSentinelRoutes(app: Hono): void {
     await sentinelStore.loadTriggers();
     const t = sentinelStore.getTrigger(c.req.param('id'));
     if (!t) return c.json({ error: `trigger '${c.req.param('id')}' not found` }, 404);
+    if (t.source.type === 'check') {
+      // A check trigger's test runs its script once (a dry run): nothing
+      // saved, nobody woken, its state folder untouched.
+      const { sha: _sha, ...report } = await dryRunCheck({ agent: t.dispatch.agent, source: t.source, evaluator: t.evaluator ?? { type: 'ready' }, config, installed: t });
+      return c.json({ ok: report.ok, dryRun: report });
+    }
     await sentinelScheduler.fireTrigger(t, { catchUp: false, testMode: true });
     return c.json({ ok: true, hint: `Test-fire dispatched. See history + the target agent's session '${t.dispatch.session}'.` });
   });

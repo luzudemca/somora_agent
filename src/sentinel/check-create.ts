@@ -7,7 +7,7 @@ import type { Config } from '../config/types.ts';
 import { checkBlacklist } from '../tools/exec/blacklist.ts';
 import { validateDecisionEvaluator } from './check-judge.ts';
 import { initialCheckState } from './check-logic.ts';
-import { installCheckScript, langOf, removeCheckFiles, saveCheckState } from './check-store.ts';
+import { installCheckScript, langOf, removeCheckFiles, saveCheckState, sha256 } from './check-store.ts';
 import { parseInterval } from './schedule.ts';
 import type { CheckSource, DecisionWakeRule, Evaluator } from './types.ts';
 
@@ -93,17 +93,36 @@ export function validateCheckSpec(input: CheckSpecInput, limits: Limits, now: Da
   return { ok: true, deadline: deadline.toISOString(), intervalMs };
 }
 
-/** Validate, read the script, refuse what must not run, copy it and
- *  write the first check state (due now). On any failure nothing is
- *  left behind. */
-export async function prepareCheckSource(
-  id: string,
+/** The file itself: there, not empty, not too big, nothing it must not
+ *  do. Returns its text and fingerprint (= the copy's, for the dry-run check). */
+export async function checkScriptFile(path: string): Promise<{ ok: true; text: string; sha256: string } | { ok: false; error: string }> {
+  const lang = langOf(path);
+  if (!lang) return { ok: false, error: 'the script must be a .sh, .py or .js/.mjs file' };
+  let size: number;
+  try {
+    const st = await stat(path);
+    if (!st.isFile()) return { ok: false, error: `${path} is not a file` };
+    size = st.size;
+  } catch {
+    return { ok: false, error: `script not found: ${path}` };
+  }
+  if (size === 0) return { ok: false, error: 'the script is empty' };
+  if (size > MAX_SCRIPT_BYTES) return { ok: false, error: `the script is over ${MAX_SCRIPT_BYTES / 1024} KB` };
+  const bytes = await readFile(path);
+  const refused = refusedScript(bytes.toString('utf8'), lang);
+  if (refused) return { ok: false, error: `refused: ${refused}` };
+  return { ok: true, text: bytes.toString('utf8'), sha256: sha256(bytes) };
+}
+
+/** Everything that must hold, without copying anything: the settings,
+ *  the Art 2 questions and rule, the file. For the dry run, create and
+ *  update alike. `sha256` is the fingerprint the copy will have. */
+export async function validateCheckInput(
   input: CheckSpecInput,
   config: Config,
   now: Date = new Date(),
-): Promise<{ ok: true; source: CheckSource; evaluator: Evaluator } | { ok: false; error: string }> {
-  const limits = config.sentinel.checks;
-  const v = validateCheckSpec(input, limits, now);
+): Promise<{ ok: true; deadline?: string; evaluator: Evaluator; sha256: string } | { ok: false; error: string }> {
+  const v = validateCheckSpec(input, config.sentinel.checks, now);
   if (!v.ok) return v;
   let evaluator: Evaluator = { type: 'ready' };
   if (input.decision) {
@@ -111,34 +130,38 @@ export async function prepareCheckSource(
     if (bad) return { ok: false, error: bad };
     evaluator = { type: 'decision', questions: input.decision.questions as Record<string, unknown>, wake: input.decision.wake as DecisionWakeRule };
   }
-  let size: number;
-  try {
-    const st = await stat(input.scriptPath);
-    if (!st.isFile()) return { ok: false, error: `${input.scriptPath} is not a file` };
-    size = st.size;
-  } catch {
-    return { ok: false, error: `script not found: ${input.scriptPath}` };
-  }
-  if (size === 0) return { ok: false, error: 'the script is empty' };
-  if (size > MAX_SCRIPT_BYTES) return { ok: false, error: `the script is over ${MAX_SCRIPT_BYTES / 1024} KB` };
-  const lang = langOf(input.scriptPath)!;
-  const refused = refusedScript(await readFile(input.scriptPath, 'utf8'), lang);
-  if (refused) return { ok: false, error: `refused: ${refused}` };
+  const file = await checkScriptFile(input.scriptPath);
+  if (!file.ok) return file;
+  return { ok: true, ...(v.deadline ? { deadline: v.deadline } : {}), evaluator, sha256: file.sha256 };
+}
 
+export function buildCheckSource(input: CheckSpecInput, deadline: string | undefined, script: CheckSource['script']): CheckSource {
+  return {
+    type: 'check',
+    description: input.description.trim(),
+    interval: input.interval.trim(),
+    mode: input.mode,
+    ...(deadline ? { deadline } : {}),
+    script,
+    ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+    ...(input.notifyOnFirst ? { notifyOnFirst: true } : {}),
+  };
+}
+
+/** Validate, copy the script and write the first check state (due now).
+ *  On any failure nothing is left behind. */
+export async function prepareCheckSource(
+  id: string,
+  input: CheckSpecInput,
+  config: Config,
+  now: Date = new Date(),
+): Promise<{ ok: true; source: CheckSource; evaluator: Evaluator } | { ok: false; error: string }> {
+  const v = await validateCheckInput(input, config, now);
+  if (!v.ok) return v;
   try {
     const script = await installCheckScript(id, input.scriptPath);
-    const source: CheckSource = {
-      type: 'check',
-      description: input.description.trim(),
-      interval: input.interval.trim(),
-      mode: input.mode,
-      ...(v.deadline ? { deadline: v.deadline } : {}),
-      script,
-      ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
-      ...(input.notifyOnFirst ? { notifyOnFirst: true } : {}),
-    };
     await saveCheckState({ ...initialCheckState(id, now), nextCheckAt: now.toISOString() });
-    return { ok: true, source, evaluator };
+    return { ok: true, source: buildCheckSource(input, v.deadline, script), evaluator: v.evaluator };
   } catch (err) {
     await removeCheckFiles(id).catch(() => {});
     return { ok: false, error: `could not copy the script: ${(err as Error).message}` };

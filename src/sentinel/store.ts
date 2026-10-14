@@ -258,6 +258,6 @@ export async function countFiresToday(triggerId: string): Promise<number> {
   todayStart.setUTCHours(0, 0, 0, 0);
   const history = await getHistory(triggerId, SENTINEL_LIMITS.MAX_FIRES_PER_DAY + 50);
   return history.filter((h) =>
-    new Date(h.firedAt).getTime() >= todayStart.getTime() && h.outcome !== 'skipped'
+    new Date(h.firedAt).getTime() >= todayStart.getTime() && (h.outcome === 'success' || h.outcome === 'error')
   ).length;
 }

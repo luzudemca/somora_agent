@@ -219,8 +219,11 @@ export interface FireHistoryEntry {
   firedAt: string;
   /** Trigger snapshot's nextFireAt at fire-time — for "was this catch-up?". */
   scheduledFor: string;
-  /** Outcome of the dispatch. */
-  outcome: 'success' | 'error' | 'skipped';
+  /** Outcome of the dispatch. `updated`: a check trigger got a new
+   *  script or settings (not a fire). */
+  outcome: 'success' | 'error' | 'skipped' | 'updated';
+  /** `updated`: what changed. */
+  note?: string;
   /** When skipped, why (cooldown / paused-during-fire / daily-cap). */
   skipReason?: string;
   /** When error, error message. */

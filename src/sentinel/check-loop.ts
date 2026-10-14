@@ -21,7 +21,7 @@ import { judgeCheckData } from './check-judge.ts';
 import { runCheck } from './check-runner.ts';
 import { cachedCheckState, loadCheckState, saveCheckState } from './check-store.ts';
 import { parseInterval } from './schedule.ts';
-import { getTrigger, saveTrigger } from './store.ts';
+import { getTrigger, recordFire, saveTrigger } from './store.ts';
 import type { CheckSource, CheckState, Trigger } from './types.ts';
 
 /** What a wake carries into the evidence block (dispatcher.ts). */
@@ -108,8 +108,9 @@ function safeInterval(source: CheckSource): number {
   }
 }
 
-function nextCheckAfter(source: CheckSource, step: CheckStep, now: Date): string {
-  const interval = safeInterval(source);
+function nextCheckAfter(source: CheckSource, step: CheckStep, now: Date, limits: Config['sentinel']['checks']): string {
+  // A floor raised in config.yaml after creation applies from the next check.
+  const interval = Math.max(safeInterval(source), source.mode === 'once' ? limits.minIntervalOnceMs : limits.minIntervalMs);
   let at = now.getTime() + (step.state.last && !step.state.last.ok ? nextAfterError(interval, step.state.errorStreak) : interval);
   if (source.mode === 'once' && source.deadline) {
     const deadline = new Date(source.deadline).getTime();
@@ -213,6 +214,7 @@ export async function runDueCheck(trigger: Trigger, deps: CheckLoopDeps, now: ()
       ? { ...fresh, status: 'paused', statusReason: `auto-paused: ${step.pause.reason}`, autoPausedForDayUtc: at.toISOString().slice(0, 10) }
       : { ...fresh, status: 'error', statusReason: `auto-paused: ${step.pause.reason.slice(0, 300)}` };
     await saveTrigger(updated);
+    await recordFire(fresh.id, { firedAt: at.toISOString(), scheduledFor: at.toISOString(), outcome: 'error', error: `check paused: ${step.pause.reason.slice(0, 300)}` });
     logger.warn({
       msg: 'sentinel.check.paused',
       triggerId: fresh.id,
@@ -224,7 +226,7 @@ export async function runDueCheck(trigger: Trigger, deps: CheckLoopDeps, now: ()
     return;
   }
 
-  const next = { ...step.state, nextCheckAt: nextCheckAfter(fresh.source, step, at) };
+  const next = { ...step.state, nextCheckAt: nextCheckAfter(fresh.source, step, at, cfg) };
   await saveCheckState(next);
 
   if (step.wake) {

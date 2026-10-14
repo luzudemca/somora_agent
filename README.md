@@ -140,8 +140,9 @@ On top of chat and memory, each optional and off until configured:
   dictation and spoken replies ([docs/voice.md](docs/voice.md)).
 - **Projects** — bind a session to a real-world thing via a manifest of
   pointers the agent sees in its prompt ([docs/projects.md](docs/projects.md)).
-- **Sentinel** — time-based triggers (`at` / `every` / `daily` / `cron`)
-  that wake an agent on a schedule ([docs/sentinel.md](docs/sentinel.md)).
+- **Sentinel** — triggers that wake an agent on a schedule (`at` /
+  `every` / `daily` / `cron`) or when a small check script sees
+  something happen ([docs/sentinel.md](docs/sentinel.md)).
 - **External MCP servers** — one config entry, all engines see the tools,
   gateable per agent ([docs/mcp.md](docs/mcp.md)).
 - **Language servers** — with one installed, every file a builder
@@ -352,7 +353,7 @@ shapes but **not yet tested against a live account**.
    │
    ├─ Dream system      REM  session → memory   ·   Deep  memory → wiki   ·   Lucid  wiki review
    │
-   ├─ Sentinel          ~/.somora/sentinel/triggers.json — time-based fires as agent turns
+   ├─ Sentinel          ~/.somora/sentinel/triggers.json — time and check-script fires as agent turns
    │
    ├─ Optional          realtime voice call · Chromium per agent · image + video generation
    │

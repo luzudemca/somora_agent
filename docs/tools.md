@@ -236,7 +236,7 @@ Toolsets `skills`, `sentinel` and `projects`.
 |---|---|
 | `skill` | Loads the full text of one skill from `~/.somora/skills/<slug>/SKILL.md`. |
 | `skill_list` | Lists the skills the agent may use, fresh from disk. |
-| `sentinel` | Manages triggers that wake an agent on a schedule: `action` is `create`, `list`, `get`, `pause`, `resume`, `delete`, `test`, `history` or `purge_completed`. |
+| `sentinel` | Manages triggers that wake an agent on a schedule or when a check script sees something happen: `action` is `create`, `dry_run`, `update`, `list`, `get`, `pause`, `resume`, `delete`, `test`, `history` or `purge_completed`. |
 | `entity_list` | Lists the entities a project can belong to. |
 | `project_list` | Lists projects, filtered by entity or tag. |
 | `project_get` | Shows one project with its paths. |
