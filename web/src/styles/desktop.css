@@ -1047,16 +1047,32 @@ input, textarea { font: inherit; color: inherit; background: none; border: 0; ou
 }
 .sentinel-divider-rule {
   flex: 1;
+  min-width: 12px;
   height: 1px;
   background: var(--line-2);
 }
+/* One line that always fits the window: only the subtitle gives way
+ * and ends in "…"; icon, label, time and chevron stay whole. The full
+ * text opens on a click (2026-10-13: a video path pushed it 1300 px
+ * past a phone's width). */
 .sentinel-divider-body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   white-space: nowrap;
   padding: 0 4px;
+  min-width: 0;
+  overflow: hidden;
 }
+.sentinel-divider-body > * { flex-shrink: 0; }
+.sentinel-divider-body > .sentinel-divider-name {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The id gives way before the name. */
+.sentinel-divider-body > .sentinel-divider-detail { flex-shrink: 4; min-width: 0; }
 .sentinel-divider-label {
   font-weight: 600;
   color: var(--text-2);

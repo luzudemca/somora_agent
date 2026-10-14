@@ -87,9 +87,17 @@ export function agentAnswerWhoFromText(text: string): string {
   return /^\[agent answer\]\s*(\w+)/.exec(text)?.[1] ?? '';
 }
 
-/** First line after the `[video]` marker. */
+/** The `[video]` wake in a few words: `ready · <file name>` or
+ *  `failed · <model>` — the full path and prompt stay in the body a
+ *  click opens (a whole path pushed the divider past a phone's width,
+ *  2026-10-13). Any other first line is returned as it is. */
 export function videoLineFromText(text: string): string {
-  return stripOriginMarker(text).split('\n')[0]?.trim() ?? '';
+  const line = stripOriginMarker(text).split('\n')[0]?.trim() ?? '';
+  const ready = /^Your render is ready:\s*(\S+)/.exec(line);
+  if (ready) return `ready · ${ready[1]!.split('/').pop()}`;
+  const failed = /^The render you started \(([^,]+),/.exec(line);
+  if (failed && /\bfailed\b/.test(line)) return `failed · ${failed[1]!.trim()}`;
+  return line;
 }
 
 /** `[system: restart] …` → `restart`. */

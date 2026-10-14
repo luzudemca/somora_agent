@@ -5,7 +5,7 @@
 // recorded before 2026-09-13, and bubbles (null) for people, peer
 // agents and a sub-agent's own brief.
 import assert from 'node:assert/strict';
-import { originPresentation } from './origin';
+import { originPresentation, videoLineFromText } from './origin';
 
 // --- bubbles, not dividers ------------------------------------------
 assert.equal(originPresentation({ text: 'hi', origin: { kind: 'human', via: 'chat' } }), null);
@@ -129,13 +129,16 @@ const videoText = '[video] Your render is ready: /tmp/a.mp4\nModel veo, prompt "
   });
   assert.equal(p?.kind, 'job');
   assert.equal(p?.label, 'video');
-  assert.equal(p?.subtitle, 'Your render is ready: /tmp/a.mp4');
+  assert.equal(p?.subtitle, 'ready · a.mp4', 'the file name, not the whole path');
   assert.equal(p?.detail, 'job_3');
+  assert.ok(p?.body.includes('/tmp/a.mp4'), 'the full path stays in the body');
 }
+assert.equal(originPresentation({ text: videoText, fromSystem: 'job' })?.subtitle, 'ready · a.mp4');
 assert.equal(
-  originPresentation({ text: videoText, fromSystem: 'job' })?.subtitle,
-  'Your render is ready: /tmp/a.mp4',
+  videoLineFromText('[video] The render you started (veo 3, "a koala, reading") failed: quota exceeded.'),
+  'failed · veo 3',
 );
+assert.equal(videoLineFromText('[video] something else entirely'), 'something else entirely');
 
 // --- wake: system (somora itself speaking) ---------------------------
 {

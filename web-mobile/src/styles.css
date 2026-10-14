@@ -265,6 +265,8 @@ button { cursor: pointer; }
 .chat-scroll {
   flex: 1;
   overflow-y: auto;
+  /* Never sideways: one row too wide must not shift the conversation. */
+  overflow-x: hidden;
   padding: 14px 12px 8px;
   display: flex;
   flex-direction: column;
@@ -407,6 +409,10 @@ button { cursor: pointer; }
  * Tap-and-hold shows the reason via title. */
 .msg-fallback {
   display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
   font-size: 10px;
   color: var(--text-3);
   border: 1px solid var(--border, rgba(127, 127, 127, 0.35));
@@ -612,15 +618,29 @@ button { cursor: pointer; }
 }
 .sentinel-rule {
   flex: 1;
+  min-width: 12px;
   height: 1px;
   background: var(--line-2);
 }
+/* One line that always fits the screen: only the subtitle gives way
+ * and ends in "…"; icon, label, time and chevron stay whole. A tap
+ * opens the full text (2026-10-13: a video path pushed the chat
+ * 1300 px wide and the whole conversation scrolled sideways). */
 .sentinel-body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   white-space: nowrap;
   padding: 0 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+.sentinel-body > * { flex-shrink: 0; }
+.sentinel-body > .sentinel-name {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .sentinel-label {
   font-weight: 600;
