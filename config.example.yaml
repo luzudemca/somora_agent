@@ -597,7 +597,7 @@ providers:
 # back to the parent as a follow-up (an echo). docs/agents.md.
 # subagents:
 #   tools:
-#     deny: [agent_ask, agent_ask_result]
+#     deny: [agent_ask, agent_ask_result, agent_ask_cancel]
 #
 # agentLoop:
 #   maxRounds: 8                      # max tool-call rounds per turn (1..100).

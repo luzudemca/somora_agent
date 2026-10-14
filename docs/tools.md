@@ -175,8 +175,9 @@ Toolset `agents`.
 | `builder_dispatch` | Hands a build order to a builder agent and returns a `call_id`. |
 
 A sub-agent session does not get the tools in `subagents.tools.deny`,
-by default `agent_ask` and `agent_ask_result`: its answer reaches the
-parent on its own. The agents guide explains the setting.
+by default `agent_ask`, `agent_ask_result` and `agent_ask_cancel`: its
+answer reaches the parent on its own. The agents guide explains the
+setting.
 
 What an agent should know about waiting:
 

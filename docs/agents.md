@@ -433,14 +433,14 @@ The sub keeps running and the parent is woken when it finishes.
 
 A session started as a sub-agent never gets the tools listed under
 `subagents.tools.deny` in `config.yaml`, whatever persona and model it
-runs with. By default these are `agent_ask` and `agent_ask_result`. A
-sub's final answer reaches its parent on its own, so it has nothing to
-send that way.
+runs with. By default these are `agent_ask`, `agent_ask_result` and
+`agent_ask_cancel`. A sub's final answer reaches its parent on its own,
+so it has nothing to send that way.
 
 ```yaml
 subagents:
   tools:
-    deny: [agent_ask, agent_ask_result]   # the default
+    deny: [agent_ask, agent_ask_result, agent_ask_cancel]   # the default
 ```
 
 - The entries take the same forms as `tools.deny` in `agent.yaml`: a
@@ -736,7 +736,7 @@ an `openai-compatible` provider.
 | `agentLoop.longTaskMaxTimeoutMs` | `1800000` | Longest wait. |
 | `agentLoop.wakeGraceMs` | `3000` | Delay before a wake turn. 0 to 60000. |
 | `agentLoop.toolUsageReminder` | `true` | The tool reminder in the prompt. |
-| `subagents.tools.deny` | `[agent_ask, agent_ask_result]` | Tools a sub-agent session never gets. See [What a sub does not get](#what-a-sub-does-not-get). |
+| `subagents.tools.deny` | `[agent_ask, agent_ask_result, agent_ask_cancel]` | Tools a sub-agent session never gets. See [What a sub does not get](#what-a-sub-does-not-get). |
 | `promptBudgets.personaFileChars` | `8000` | Budget for each of `AGENTS.md`, `SOUL.md`, `USER.md`. |
 | `promptBudgets.personaTotalChars` | `14000` | Budget for the three together. |
 | `promptBudgets.teamBlockChars` | `3000` | Budget for the team block. |

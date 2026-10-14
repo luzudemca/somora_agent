@@ -38,7 +38,7 @@ assert.equal(isSubagentSession({ spawn: { kind: 'other' } }), false);
 
 // --- the list a session gets ------------------------------------------
 assert.deepEqual(sessionToolDeny(undefined, subMeta), [...DEFAULT_SUBAGENT_TOOL_DENY], 'no config section → the default');
-assert.deepEqual(DEFAULT_SUBAGENT_TOOL_DENY, ['agent_ask', 'agent_ask_result']);
+assert.deepEqual(DEFAULT_SUBAGENT_TOOL_DENY, ['agent_ask', 'agent_ask_result', 'agent_ask_cancel']);
 assert.deepEqual(sessionToolDeny({ subagents: { tools: { deny: ['web_fetch'] } } }, subMeta), ['web_fetch']);
 assert.deepEqual(sessionToolDeny({ subagents: { tools: { deny: [] } } }, subMeta), [], 'deny: [] gives the tools back');
 assert.deepEqual(sessionToolDeny({ subagents: { tools: { deny: ['web_fetch'] } } }, {}), [], 'a normal session gets nothing');
@@ -49,6 +49,7 @@ const deny = [...DEFAULT_SUBAGENT_TOOL_DENY];
 assert.equal(isToolAllowed('agent_ask', 'agents', chat), true, 'a normal session keeps agent_ask');
 assert.equal(isToolAllowed('agent_ask', 'agents', withSessionDeny(chat, deny)), false);
 assert.equal(isToolAllowed('agent_ask_result', 'agents', withSessionDeny(chat, deny)), false);
+assert.equal(isToolAllowed('agent_ask_cancel', 'agents', withSessionDeny(chat, deny)), false);
 assert.equal(isToolAllowed('spawn_subagent', 'agents', withSessionDeny(chat, deny)), true, 'starting further subs stays');
 assert.equal(isToolAllowed('subagent_result', 'agents', withSessionDeny(chat, deny)), true);
 assert.equal(isToolAllowed('file_read', 'file', withSessionDeny(chat, deny)), true);
@@ -73,8 +74,8 @@ const sets = new Set(['agents', 'web']);
 assert.deepEqual(unknownToolRules(['agent_ask', 'agent_aks', 'toolset:web', 'toolset:wbe', 'mcp__x__y', 'web_*'], names, sets), ['agent_aks', 'toolset:wbe']);
 
 // --- config: the default, and an empty list that stays empty ---------------
-assert.deepEqual(ConfigSchema.parse({ providers: {} }).subagents.tools.deny, ['agent_ask', 'agent_ask_result']);
-assert.deepEqual(ConfigSchema.parse({ providers: {}, subagents: {} }).subagents.tools.deny, ['agent_ask', 'agent_ask_result']);
+assert.deepEqual(ConfigSchema.parse({ providers: {} }).subagents.tools.deny, ['agent_ask', 'agent_ask_result', 'agent_ask_cancel']);
+assert.deepEqual(ConfigSchema.parse({ providers: {}, subagents: {} }).subagents.tools.deny, ['agent_ask', 'agent_ask_result', 'agent_ask_cancel']);
 assert.deepEqual(ConfigSchema.parse({ providers: {}, subagents: { tools: { deny: [] } } }).subagents.tools.deny, []);
 assert.deepEqual(ConfigSchema.parse({ providers: {}, subagents: { tools: { deny: ['exec'] } } }).subagents.tools.deny, ['exec']);
 

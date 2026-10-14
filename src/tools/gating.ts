@@ -170,7 +170,7 @@ export function isToolAllowed(
  *  parent on its own, and an extra agent_ask to the parent comes back
  *  as an echo of the parent's own reply (agent report, 2026-10-13;
  *  468 sub sessions used it 5 times, every time to report to the parent). */
-export const DEFAULT_SUBAGENT_TOOL_DENY: readonly string[] = ['agent_ask', 'agent_ask_result'];
+export const DEFAULT_SUBAGENT_TOOL_DENY: readonly string[] = ['agent_ask', 'agent_ask_result', 'agent_ask_cancel'];
 
 /** A session spawn_subagent started (meta `spawn.kind` sub or self-sub) —
  *  for good, also for later turns in it. */

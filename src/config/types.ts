@@ -2476,10 +2476,10 @@ export const ConfigSchema = z.object({
   subagents: z
     .object({
       tools: z
-        .object({ deny: z.array(z.string().min(1)).default(['agent_ask', 'agent_ask_result']) })
-        .default({ deny: ['agent_ask', 'agent_ask_result'] }),
+        .object({ deny: z.array(z.string().min(1)).default(['agent_ask', 'agent_ask_result', 'agent_ask_cancel']) })
+        .default({ deny: ['agent_ask', 'agent_ask_result', 'agent_ask_cancel'] }),
     })
-    .default({ tools: { deny: ['agent_ask', 'agent_ask_result'] } }),
+    .default({ tools: { deny: ['agent_ask', 'agent_ask_result', 'agent_ask_cancel'] } }),
   promptBudgets: PromptBudgetsSchema,
   engineWatchdog: EngineWatchdogConfigSchema,
   sse: SseConfigSchema,
