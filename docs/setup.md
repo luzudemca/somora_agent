@@ -716,6 +716,7 @@ not watched: they run outside the chat.
 | `memory`, `obsidian` | [Memory](memory.md) |
 | `rem`, `wiki` | [Dream phases](dream-phases.md), [Wiki](wiki.md) |
 | `promptBudgets` | [Team](team.md), [Agents](agents.md) |
+| `subagents` | [Agents](agents.md#what-a-sub-does-not-get) |
 | `thinkingContent` | [Thinking](thinking.md) |
 | `tui` | [TUI display](display.md) |
 | `mobile` | [Mobile app](mobile.md) |

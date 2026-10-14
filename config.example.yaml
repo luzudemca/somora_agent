@@ -589,6 +589,16 @@ providers:
 # When a long-task hits its timeout, the tool returns state:"pending"
 # (NOT an error) — the sub keeps running, the caller can retry with a
 # higher timeout_ms or check status later. See DECISION #37.
+# Sessions started as sub-agents (spawn_subagent) never get these tools,
+# whatever persona and model: same forms as agent.yaml tools.deny (a name,
+# toolset:<family>, prefix*), and they beat every allow. The default takes
+# away agent_ask: a sub's answer reaches its parent on its own. With
+# deny: [] a sub that also reports via agent_ask sends the parent's reply
+# back to the parent as a follow-up (an echo). docs/agents.md.
+# subagents:
+#   tools:
+#     deny: [agent_ask, agent_ask_result]
+#
 # agentLoop:
 #   maxRounds: 8                      # max tool-call rounds per turn (1..100).
 #                                     # Most conversations finish in 1-3;

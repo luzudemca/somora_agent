@@ -64,7 +64,7 @@ import { injectMemoryContext, injectedKeysInHistory } from '../memory/inject.ts'
 import { getMemoryManager } from '../memory/registry.ts';
 import { logger } from './logger.ts';
 import { loadPersona, type Persona } from '../persona/loader.ts';
-import { isToolAllowed } from '../tools/gating.ts';
+import { isToolAllowed, sessionToolDeny, withSessionDeny } from '../tools/gating.ts';
 import { createTurnSerializer } from './sse-serializer.ts';
 import { sanitizeAssistantText } from './sanitize-assistant-text.ts';
 import { synthesize } from '../tts/service.ts';
@@ -910,11 +910,15 @@ export async function runChatTurn(args: RunChatTurnArgs): Promise<ChatTurnResult
     // buildMessages without a separate inject step.
     const history = await getHistory(agent, session);
 
+    // A session started as a sub-agent never gets the tools in
+    // subagents.tools.deny (default: agent_ask) — in the list and at the call.
+    const subDeny = sessionToolDeny(await getFreshConfig(), sessionMeta);
     const toolCtx = {
       agent,
       session,
       turnId,
       subagentDepth,
+      ...(subDeny.length > 0 ? { sessionToolDeny: subDeny } : {}),
       ...(args.signal ? { signal: args.signal } : {}),
       getMemoryManager: () =>
         getMemoryManager(agent, {
@@ -963,7 +967,7 @@ export async function runChatTurn(args: RunChatTurnArgs): Promise<ChatTurnResult
       claimWorkdir({ agent, session, turnId, workdir: folder });
     }
     const availableTools = (await deps.tools.listAvailable(toolCtx))
-      .filter((t) => isToolAllowed(t.name, t.toolset, persona.toolGating) && builderSessionAllows(builderState, t.name))
+      .filter((t) => isToolAllowed(t.name, t.toolset, withSessionDeny(persona.toolGating, subDeny)) && builderSessionAllows(builderState, t.name))
       // A builder's model sees the short descriptions (its harness prompt
       // carries the policy); the registry and every chat agent keep the
       // long ones.

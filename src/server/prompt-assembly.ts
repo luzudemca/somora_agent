@@ -234,7 +234,7 @@ export async function assembleSystemPrompt(args: {
   const selfPointer = buildSelfPointer(persona, freshConfig, SOMORA_HOME_DIR);
   const subContextNote =
     subagentDepth > 0
-      ? `\n\nNote: this is a SUBAGENT turn (depth=${subagentDepth}). You were spawned by another agent to do a focused task; finish, return your result, and stop. What you return is what your parent gets: if you started sub-agents of your own, do not hand in your report while they are still working — wait for them (spawn with wait:true, or subagent_result with wait_until_done) and fold their results in. Your final answer reaches your parent on its own: do not also send it, or a note that you are done, with agent_ask. Use agent_ask with your parent only for a question you need answered to continue.`
+      ? `\n\nNote: this is a SUBAGENT turn (depth=${subagentDepth}). You were spawned by another agent to do a focused task; finish, return your result, and stop. What you return is what your parent gets: if you started sub-agents of your own, do not hand in your report while they are still working — wait for them (spawn with wait:true, or subagent_result with wait_until_done) and fold their results in. Your final answer reaches your parent on its own: do not send it, or a note that you are done, a second way.`
       : '';
   // Team block (team.yaml → "# Your team", src/team): first who I am,
   // then who the others are, then tools. Changes only with team.yaml or

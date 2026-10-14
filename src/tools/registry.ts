@@ -12,6 +12,7 @@
 
 import { DEFAULT_MAX_IMAGE_EDGE, fitImageForModel } from '../multimodal/model-image.ts';
 import { isLoopHolder } from '../dream/loop-state.ts';
+import { matchesToolPattern } from './gating.ts';
 import { logger } from '../server/logger.ts';
 import { saveToolOutput } from './tool-output.ts';
 import {
@@ -194,6 +195,16 @@ export class ToolRegistry {
         error:
           `tool '${name}' is hidden while you hold the active dream_review loop — ` +
           "use wiki_* for wiki changes, or end the loop with dream_review action='end' first",
+      };
+    }
+    // A sub-agent session's own deny list holds at the call too: an
+    // engine resumed from an older turn may still know the tool.
+    if (ctx.sessionToolDeny?.some((p) => matchesToolPattern(p, name, tool.toolset))) {
+      return {
+        ok: false,
+        error:
+          `tool '${name}' is not available in a sub-agent session (subagents.tools.deny in config.yaml). ` +
+          'Your final answer reaches your parent on its own.',
       };
     }
     if (tool.available) {

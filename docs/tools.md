@@ -174,6 +174,10 @@ Toolset `agents`.
 | `session_model` | Switches the model of an existing session, or clears the override with `clear:true`. |
 | `builder_dispatch` | Hands a build order to a builder agent and returns a `call_id`. |
 
+A sub-agent session does not get the tools in `subagents.tools.deny`,
+by default `agent_ask` and `agent_ask_result`: its answer reaches the
+parent on its own. The agents guide explains the setting.
+
 What an agent should know about waiting:
 
 - **A spawn is a background task.** The default is `wait:false`: the

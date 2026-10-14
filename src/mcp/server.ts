@@ -29,7 +29,7 @@ import { getMemoryManager, shutdownMemoryRegistry } from '../memory/registry.ts'
 import { mcpInputSchemaFor } from './tool-schema.ts';
 import { loadPersona } from '../persona/loader.ts';
 import { logger } from '../server/logger.ts';
-import { isToolAllowed } from '../tools/gating.ts';
+import { isToolAllowed, sessionToolDeny, withSessionDeny } from '../tools/gating.ts';
 import { builderSessionAllows, readBuilderState } from '../server/builder-session.ts';
 import { killRunningLocalExecs } from '../tools/exec/local.ts';
 import { builderToolDescription } from '../tools/builder/short-descriptions.ts';
@@ -51,7 +51,13 @@ async function proxyMain(agent: string, proxyServer: string): Promise<void> {
   const { loopbackFetch, classifyFetchError } = await import('../server/loopback-fetch.ts');
 
   const persona = await loadPersona(agent);
-  const toolGating = persona?.toolGating;
+  // A sub-agent session's own deny list (subagents.tools.deny) covers
+  // external tools too: `mcp__<server>__*` entries hide them here.
+  const proxySession = process.env.SOMORA_SESSION || undefined;
+  const toolGating = withSessionDeny(
+    persona?.toolGating,
+    proxySession ? sessionToolDeny(await loadConfig(), await sessionMetaStore.get(agent, proxySession)) : [],
+  );
   // The gating rules need each built-in tool's family: an exception like
   // `allow: [file_read]` under `deny: [toolset:file]` is told apart from
   // the old "only these" form by it. Registering sets that lookup; without
@@ -228,9 +234,13 @@ async function main(): Promise<void> {
     });
   }
 
+  // A session started as a sub-agent never gets subagents.tools.deny
+  // (default: agent_ask) — the same rule run-turn applies in-process.
+  const subDeny = session ? sessionToolDeny(config, await sessionMetaStore.get(agent, session)) : [];
   const ctx: ToolContext = {
     agent,
     ...(session ? { session } : {}),
+    ...(subDeny.length > 0 ? { sessionToolDeny: subDeny } : {}),
     ...(Number.isFinite(subagentDepth) && subagentDepth > 0 ? { subagentDepth } : {}),
     ...(activeModel ? { activeModel } : {}),
     getMemoryManager: () =>
@@ -254,7 +264,7 @@ async function main(): Promise<void> {
   // in-process ToolInvoker filter in run-turn.ts, so claude-cli/
   // codex-cli see exactly the gated set the openai-compat path sees.
   const persona = await loadPersona(agent);
-  const toolGating = persona?.toolGating;
+  const toolGating = withSessionDeny(persona?.toolGating, subDeny);
   // Builder sessions: mode and phase hide tools too (builder-session.ts),
   // the same way run-turn hides them for the openai-compatible engine.
   const builderState =

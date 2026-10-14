@@ -198,6 +198,8 @@ export interface InboxStateSources {
   configProblem: () => { since: number | string; message: string } | null;
   mcpServers: () => Record<string, { state: string; lastError?: string; lastConnectedAt?: number }>;
   unavailableModels: () => Array<{ ref: string; reason: string }>;
+  /** Entries of subagents.tools.deny that name no tool (a typo). */
+  subagentDenyUnknown?: () => string[];
 }
 
 /** States without a single event, checked every few minutes. */
@@ -238,6 +240,20 @@ export function inboxFromState(inbox: Inbox, src: InboxStateSources, now = Date.
     }, { count: false });
   } else {
     inbox.resolve('config');
+  }
+
+  // subagents.tools.deny names a tool that does not exist — most likely
+  // a typo, and then the tool it meant is still there.
+  const unknown = src.subagentDenyUnknown?.() ?? [];
+  if (unknown.length > 0) {
+    inbox.raise('config:subagents-deny', {
+      kind: 'config',
+      level: 'warning',
+      title: 'subagents.tools.deny names a tool somora does not have',
+      text: `${unknown.map((u) => `\`${u}\``).join(', ')} in config.yaml matches nothing, so it hides nothing. A typo? The rest of the list applies.`,
+    }, { count: false });
+  } else {
+    inbox.resolve('config:subagents-deny');
   }
 
   // Tool servers: a lost login at once, an outage after a day.

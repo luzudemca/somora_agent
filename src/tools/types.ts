@@ -32,6 +32,10 @@ export interface ToolContext {
    * SOMORA_SESSION env set by the engine launcher per turn.
    */
   session?: string;
+  /** Tools this session may not call although its agent may — the
+   *  `subagents.tools.deny` list in a session started as a sub-agent.
+   *  Checked at the call, not only in the listing (registry.invoke). */
+  sessionToolDeny?: string[];
   /**
    * Id of the turn this invocation belongs to. Lets a tool scope
    * per-turn state — today only the image budget, which counts

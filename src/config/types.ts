@@ -2465,6 +2465,21 @@ export const ConfigSchema = z.object({
     .object({ retryUnavailableMinutes: z.number().int().min(1).max(24 * 60).default(60) })
     .default({ retryUnavailableMinutes: 60 }),
   agentLoop: AgentLoopConfigSchema,
+  /**
+   * Sessions started as sub-agents (spawn_subagent): tools they never
+   * get, whatever the persona and model — same forms as agent.yaml
+   * `tools.deny` (a name, `toolset:<family>`, `<prefix>*`), and they beat
+   * every allow. Default: no agent_ask — the report reaches the parent on
+   * its own, and an agent_ask to the parent came back as an echo of the
+   * parent's own reply (2026-10-13). `deny: []` gives it back, echoes included.
+   */
+  subagents: z
+    .object({
+      tools: z
+        .object({ deny: z.array(z.string().min(1)).default(['agent_ask', 'agent_ask_result']) })
+        .default({ deny: ['agent_ask', 'agent_ask_result'] }),
+    })
+    .default({ tools: { deny: ['agent_ask', 'agent_ask_result'] } }),
   promptBudgets: PromptBudgetsSchema,
   engineWatchdog: EngineWatchdogConfigSchema,
   sse: SseConfigSchema,

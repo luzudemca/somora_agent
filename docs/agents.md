@@ -394,7 +394,8 @@ check.
 ## Sub-agents
 
 `spawn_subagent` delegates a sealed task. The sub runs in a fresh
-session of the target agent, with normal memory, tools and thinking,
+session of the target agent, with normal memory, tools and thinking
+(less what [subagents.tools.deny](#what-a-sub-does-not-get) takes away),
 and returns a final answer. The session is named
 `sub-<parent>-<timestamp>`, or `sub-self-…` for a clone of the caller,
 and stays visible in the session list with a "sub from" marker.
@@ -427,6 +428,38 @@ A `wait: true` that runs out is not a failure. The wait is just under
 `agentLoop.longTaskMaxTimeoutMs` (30 minutes). After that the tool
 returns `ok: false, wait: "sync", state: "pending"` with the `task_id`.
 The sub keeps running and the parent is woken when it finishes.
+
+### What a sub does not get
+
+A session started as a sub-agent never gets the tools listed under
+`subagents.tools.deny` in `config.yaml`, whatever persona and model it
+runs with. By default these are `agent_ask` and `agent_ask_result`. A
+sub's final answer reaches its parent on its own, so it has nothing to
+send that way.
+
+```yaml
+subagents:
+  tools:
+    deny: [agent_ask, agent_ask_result]   # the default
+```
+
+- The entries take the same forms as `tools.deny` in `agent.yaml`: a
+  tool name, `toolset:<family>`, or a prefix ending in `*`.
+- They beat every rule of the agent, an `allow` included.
+- They hold for the whole session, also for wake turns and for
+  messages a person types into it later.
+- Starting further subs stays possible.
+- A change applies to the next turn, without a restart.
+- A model that calls a listed tool anyway gets "not available in a
+  sub-agent session".
+- An entry that names no tool, most likely a typo, is reported in the
+  server log and in the web client's inbox. The rest of the list
+  applies.
+
+> **Warning:** With `deny: []` a sub may use `agent_ask` again. A sub
+> that also sends its report to its parent that way makes the parent's
+> reply come back to the parent as a follow-up: an echo, one extra turn
+> for nothing.
 
 ### Checking on a sub
 
@@ -703,6 +736,7 @@ an `openai-compatible` provider.
 | `agentLoop.longTaskMaxTimeoutMs` | `1800000` | Longest wait. |
 | `agentLoop.wakeGraceMs` | `3000` | Delay before a wake turn. 0 to 60000. |
 | `agentLoop.toolUsageReminder` | `true` | The tool reminder in the prompt. |
+| `subagents.tools.deny` | `[agent_ask, agent_ask_result]` | Tools a sub-agent session never gets. See [What a sub does not get](#what-a-sub-does-not-get). |
 | `promptBudgets.personaFileChars` | `8000` | Budget for each of `AGENTS.md`, `SOUL.md`, `USER.md`. |
 | `promptBudgets.personaTotalChars` | `14000` | Budget for the three together. |
 | `promptBudgets.teamBlockChars` | `3000` | Budget for the team block. |

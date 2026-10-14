@@ -31,6 +31,10 @@ export interface ToolGating {
   /** Set on the gating a turn runs with (effectiveToolGating): decides
    *  the default for tools no rule names. Missing = chat. */
   kind?: AgentKind;
+  /** Rules for this session alone that beat every allow — the
+   *  `subagents.tools.deny` list on a session started as a sub-agent
+   *  (withSessionDeny). */
+  sessionDeny?: string[];
 }
 
 /** A rule for a whole family or server: `toolset:<tag>` or `<prefix>*`. */
@@ -152,6 +156,7 @@ export function isToolAllowed(
   gating: ToolGating | undefined,
 ): boolean {
   if (!gating) return true;
+  if (gating.sessionDeny?.some((p) => matchesToolPattern(p, name, toolset))) return false;
   const builder = gating.kind === 'builder';
   if (!builder && isBuilderOnly(name, toolset)) return false;
   if (gating.deny.includes(name)) return false;
@@ -159,6 +164,46 @@ export function isToolAllowed(
   if (gating.deny.some((p) => isGroupRule(p) && matchesToolPattern(p, name, toolset))) return false;
   if (builder) return BUILDER_TOOL_ALLOW.includes(name);
   return !isLegacyAllowList(gating);
+}
+
+/** Default of `subagents.tools.deny`: a sub-agent's report reaches its
+ *  parent on its own, and an extra agent_ask to the parent comes back
+ *  as an echo of the parent's own reply (agent report, 2026-10-13;
+ *  468 sub sessions used it 5 times, every time to report to the parent). */
+export const DEFAULT_SUBAGENT_TOOL_DENY: readonly string[] = ['agent_ask', 'agent_ask_result'];
+
+/** A session spawn_subagent started (meta `spawn.kind` sub or self-sub) —
+ *  for good, also for later turns in it. */
+export function isSubagentSession(meta: unknown): boolean {
+  const spawn = (meta as { spawn?: { kind?: unknown } } | null | undefined)?.spawn;
+  return spawn?.kind === 'sub' || spawn?.kind === 'self-sub';
+}
+
+/** The rules a session adds on top of its agent's: `subagents.tools.deny`
+ *  for a sub-agent session, nothing otherwise. */
+export function sessionToolDeny(
+  config: { subagents?: { tools?: { deny?: readonly string[] } } } | undefined,
+  meta: unknown,
+): string[] {
+  if (!isSubagentSession(meta)) return [];
+  return [...(config?.subagents?.tools?.deny ?? DEFAULT_SUBAGENT_TOOL_DENY)];
+}
+
+/** The agent's gating with a session's own rules on top. */
+export function withSessionDeny(gating: ToolGating | undefined, deny: readonly string[]): ToolGating | undefined {
+  if (deny.length === 0) return gating;
+  return { ...(gating ?? { deny: [], allow: [] }), sessionDeny: [...deny] };
+}
+
+/** Entries of a deny list that name nothing: not a tool somora has, not
+ *  a known family, not a pattern. MCP tools (`mcp__…`) count as known —
+ *  their server may simply be down. */
+export function unknownToolRules(rules: readonly string[], knownNames: ReadonlySet<string>, knownToolsets: ReadonlySet<string>): string[] {
+  return rules.filter((r) => {
+    if (r.startsWith('toolset:')) return !knownToolsets.has(r.slice('toolset:'.length));
+    if (r.endsWith('*') || r.startsWith('mcp__')) return false;
+    return !knownNames.has(r);
+  });
 }
 
 /** The task list, question and plan file belong to the builder kind: a

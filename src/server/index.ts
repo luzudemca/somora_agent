@@ -153,7 +153,7 @@ import {
   ToolRegistry,
 } from '../tools/index.ts';
 import type { ToolContext } from '../tools/types.ts';
-import { BUILDER_TOOL_ALLOW, gatingToStore, isBuilderOnly, isImpliedRule, isToolAllowed } from '../tools/gating.ts';
+import { BUILDER_TOOL_ALLOW, gatingToStore, isBuilderOnly, isImpliedRule, isToolAllowed, sessionToolDeny, unknownToolRules, withSessionDeny } from '../tools/gating.ts';
 import { toggleSkills, toggleTools } from '../tools/gating-edit.ts';
 import { writeAgentToolGating } from '../persona/tool-gating-store.ts';
 import { writeAgentSkillGating } from '../persona/skill-gating-store.ts';
@@ -1874,7 +1874,25 @@ const updateChecker = new UpdateChecker({
 });
 updateChecker.start();
 
+// subagents.tools.deny entries that name nothing (a typo): logged once
+// per change and shown in the inbox; the list still applies.
+let subagentDenyUnknown: string[] = [];
+async function refreshSubagentDenyCheck(): Promise<void> {
+  const fresh = await getFreshConfig().catch(() => config);
+  const defs = tools.list();
+  const unknown = unknownToolRules(
+    fresh.subagents.tools.deny,
+    new Set(defs.map((t) => t.name)),
+    new Set(defs.map((t) => t.toolset).filter((s): s is NonNullable<typeof s> => !!s)),
+  );
+  if (unknown.join('\n') !== subagentDenyUnknown.join('\n') && unknown.length > 0) {
+    logger.warn({ msg: 'config.subagents_deny_unknown', unknown, hint: 'these entries in subagents.tools.deny match no tool' });
+  }
+  subagentDenyUnknown = unknown;
+}
+
 function checkInboxState(): void {
+  void refreshSubagentDenyCheck();
   inboxFromState(inbox, {
     version: SOMORA_VERSION,
     update: () => {
@@ -1884,8 +1902,10 @@ function checkInboxState(): void {
     configProblem: () => currentConfigProblem(),
     mcpServers: () => (mcpHub.enabled ? mcpHub.status() : {}),
     unavailableModels: () => listUnavailableModels(),
+    subagentDenyUnknown: () => subagentDenyUnknown,
   });
 }
+void refreshSubagentDenyCheck();
 setTimeout(checkInboxState, 30_000).unref();
 setInterval(checkInboxState, 5 * 60_000).unref();
 
@@ -1893,6 +1913,7 @@ setInterval(checkInboxState, 5 * 60_000).unref();
 app.get('/inbox', async (c) => {
   // A config.yaml broken a moment ago shows up here, not 5 minutes later.
   await getFreshConfig().catch(() => undefined);
+  await refreshSubagentDenyCheck();
   checkInboxState();
   return c.json({ entries: inbox.list(), unread: inbox.unread(), muted: inbox.muted() });
 });
@@ -1975,6 +1996,7 @@ app.post('/config/reload', async (c) => {
   // there must not stay rejected until the cache expires.
   clearCatalogCache();
   logger.info({ msg: 'config.reloaded', changed, restartRequired });
+  await refreshSubagentDenyCheck();
   return c.json({ ok: true, changed, restartRequired, loadedAt: configLoadedAt });
 });
 
@@ -2247,8 +2269,9 @@ async function nextTurnPrompt(
   // builder, the session's mode and phase (ask_user off when unattended,
   // the repository-changing tools off while planning).
   const previewBuilderState = persona.kind === 'builder' ? readBuilderState(sessionMeta as Record<string, unknown>) : null;
+  const previewGating = withSessionDeny(persona.toolGating, sessionToolDeny(config, sessionMeta));
   const available = (await tools.listAvailable(toolCtx)).filter(
-    (t) => isToolAllowed(t.name, t.toolset, persona.toolGating) && builderSessionAllows(previewBuilderState, t.name),
+    (t) => isToolAllowed(t.name, t.toolset, previewGating) && builderSessionAllows(previewBuilderState, t.name),
   );
   const assembled = await assembleSystemPrompt({
     agent,
