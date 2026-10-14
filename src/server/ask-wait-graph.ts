@@ -158,14 +158,3 @@ export function findWaitCycle(from: WaitNode, to: WaitNode): string[] | null {
   path.push(keyOf(from)); // path is reversed: [from(target), …, to(start)] → append from-as-origin
   return path.reverse().map(labelOf);
 }
-
-/** Diagnostic snapshot for debug endpoints / tests. */
-export function waitGraphSnapshot(): Array<{ from: string; to: string; count: number }> {
-  const out: Array<{ from: string; to: string; count: number }> = [];
-  for (const [f, m] of graph) {
-    for (const [t, count] of m) {
-      out.push({ from: labelOf(f), to: labelOf(t), count });
-    }
-  }
-  return out;
-}

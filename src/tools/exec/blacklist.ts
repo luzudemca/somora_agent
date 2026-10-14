@@ -325,12 +325,3 @@ export function blacklistReasons(command: string): string[] {
   }
   return out;
 }
-
-/**
- * Surface the full blacklist for diagnostic / debugging tools (so a
- * developer can ask "what's currently blocked?" via a tool or log).
- * Read-only.
- */
-export function listBlacklist(): ReadonlyArray<{ pattern: string; reason: string }> {
-  return HARD_BLACKLIST.map((e) => ({ pattern: e.pattern.source, reason: e.reason }));
-}

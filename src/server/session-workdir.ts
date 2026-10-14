@@ -29,18 +29,6 @@ export async function pinnedWorkdir(agent: string, session: string | undefined):
   }
 }
 
-/** Pinned project folder, else the agent's workspace. */
-export async function sessionWorkdir(
-  agent: string,
-  session: string | undefined,
-  persona: Persona,
-  config: Config,
-): Promise<{ path: string; source: 'project' | 'workspace' }> {
-  const pinned = await pinnedWorkdir(agent, session);
-  if (pinned) return { path: pinned, source: 'project' };
-  return { path: effectiveWorkspace(persona, config), source: 'workspace' };
-}
-
 /** Same from session meta already in hand (no extra read). */
 export function workdirFromMeta(meta: Record<string, unknown>, persona: Persona, config: Config): { path: string; source: 'project' | 'workspace' } {
   const w = meta.workdir;

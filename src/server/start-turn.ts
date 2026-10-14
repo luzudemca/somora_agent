@@ -59,10 +59,6 @@ export function configureStartTurn(deps: StartTurnDeps): void {
   injected = deps;
 }
 
-export function isStartTurnConfigured(): boolean {
-  return injected !== null;
-}
-
 /** What a stopped turn reports to whoever asked for it. The asker
  *  (agent_ask, subagent_result, sentinel history) sees this as the
  *  error and must not read it as a model failure worth a retry. */

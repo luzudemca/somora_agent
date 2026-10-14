@@ -137,8 +137,3 @@ export async function deleteProjectFile(slug: string): Promise<boolean> {
     throw err;
   }
 }
-
-/** Helper exposed for tests / smoke scripts that need the concrete path. */
-export function projectFilePath(slug: string): string {
-  return projectPath(slug);
-}

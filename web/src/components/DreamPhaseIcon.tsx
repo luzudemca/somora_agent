@@ -1,7 +1,7 @@
 // Single source of truth for the dream-phase visual language.
 // REM = Brain (green), DEEP = Layers (indigo), LUCID = ScanEye (violet).
 // Colors come from CSS tokens in styles/globals.css so any tuning
-// happens in one place. TUI mirror lives in src/cli/tui/dream-glyphs.ts.
+// happens in one place.
 
 import { Brain, Layers, ScanEye } from 'lucide-react';
 

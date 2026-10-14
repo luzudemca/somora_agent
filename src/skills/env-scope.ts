@@ -167,9 +167,3 @@ export async function skillEnvScopeForCommand(
   }
   return computeSkillEnvScope(command, cachedSkills, process.env);
 }
-
-/** Test hook — drop the TTL cache. */
-export function resetSkillEnvScopeCache(): void {
-  cachedSkills = null;
-  cachedAt = 0;
-}

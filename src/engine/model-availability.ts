@@ -34,10 +34,6 @@ export function configureModelAvailability(retryUnavailableMinutes: number): voi
   ttlMs = Math.max(1, retryUnavailableMinutes) * 60_000;
 }
 
-export function modelAvailabilityTtlMs(): number {
-  return ttlMs;
-}
-
 export function markModelUnavailable(ref: string, reason: string, now = Date.now()): UnavailableEntry {
   const existing = marks.get(ref);
   const entry: UnavailableEntry = {

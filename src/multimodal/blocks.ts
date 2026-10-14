@@ -29,34 +29,6 @@ export interface TextBlock {
 
 export type ContentBlock = ImageBlock | DocumentBlock | TextBlock;
 
-/** Convert a loaded attachment into its base content block. Caller
- *  decides what to do with text-vs-binary separately if needed (e.g.,
- *  file_read returns text directly without going through this). */
-export function attachmentToBlock(att: LoadedAttachment): ContentBlock {
-  if (att.mime.kind === 'image') {
-    return {
-      type: 'image',
-      source: {
-        kind: 'base64',
-        mediaType: att.mime.mimeType,
-        data: att.bytes.toString('base64'),
-      },
-    };
-  }
-  if (att.mime.kind === 'pdf') {
-    return {
-      type: 'document',
-      source: {
-        kind: 'base64',
-        mediaType: att.mime.mimeType,
-        data: att.bytes.toString('base64'),
-      },
-    };
-  }
-  // text
-  return { type: 'text', text: att.bytes.toString('utf8') };
-}
-
 /** Produce an OpenAI-API-compatible message-content array for a
  *  vision-style chat-completion call (analyze_file). Used by the
  *  worker dispatcher to talk to openai-compatible/openrouter

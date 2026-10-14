@@ -101,6 +101,3 @@ For MERGE:
 
 No commentary. Just the JSON object.`;
 }
-
-/** German default — kept for callers that predate `wiki.language`. */
-export const DEEP_SYSTEM_PROMPT = buildDeepSystemPrompt(DEFAULT_WIKI_SCHEMA);

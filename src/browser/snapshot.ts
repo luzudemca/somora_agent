@@ -31,10 +31,3 @@ export function compactAriaSnapshot(raw: string, maxChars: number): { text: stri
   if (joined.length <= maxChars) return { text: joined, truncated: false };
   return { text: `${joined.slice(0, maxChars).trimEnd()}\n…(truncated — pass max_chars or full:false with a narrower page)`, truncated: true };
 }
-
-/** All refs mentioned in a snapshot text, for the stale-ref check. */
-export function refsIn(snapshot: string): Set<string> {
-  const refs = new Set<string>();
-  for (const m of snapshot.matchAll(/\[ref=((?:f\d+)?e\d+)\]/g)) refs.add(m[1]!);
-  return refs;
-}

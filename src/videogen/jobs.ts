@@ -20,7 +20,7 @@
 // that arrives at a full queue is told so and asked to come back, which
 // is kinder than silently waiting an unknown number of minutes.
 
-import { mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { logger, SOMORA_HOME_DIR } from '../server/logger.ts';
 import type { Config } from '../config/types.ts';
@@ -115,14 +115,6 @@ export async function updateJob(id: string, patch: JobUpdate): Promise<VideoJob 
   return next;
 }
 
-export async function deleteJob(id: string): Promise<void> {
-  try {
-    await unlink(jobPath(id));
-  } catch {
-    /* already gone */
-  }
-}
-
 /** A job still worth polling. */
 export function isActive(job: VideoJob): boolean {
   return job.status === 'queued' || job.status === 'in_progress';
@@ -159,20 +151,4 @@ export async function checkSlot(config: Config): Promise<SlotCheck> {
       `the backend works through them one at a time — try again in a few minutes, or check ` +
       `video_status to see what is running.`,
   };
-}
-
-/**
- * Jobs left mid-flight by a restart. Called once at boot: the provider
- * kept rendering (or kept the finished file), so picking the poll back
- * up is all that is needed.
- */
-export async function resumableJobs(): Promise<VideoJob[]> {
-  return listJobs({ active: true });
-}
-
-/** Jobs that finished while nobody was listening — the agent still owes
- *  a notification. */
-export async function unnotifiedJobs(): Promise<VideoJob[]> {
-  const jobs = await listJobs();
-  return jobs.filter((j) => !isActive(j) && j.agent && !j.notifiedAt);
 }

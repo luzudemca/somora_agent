@@ -77,6 +77,3 @@ Output: ONE JSON object — no commentary, no markdown fences:
 
 If the wiki is healthy or you can't find ≥1 high-quality finding, return: {"findings": []}`;
 }
-
-/** German default — kept for callers that predate `wiki.language`. */
-export const LUCID_SYSTEM_PROMPT = buildLucidSystemPrompt(DEFAULT_WIKI_SCHEMA);

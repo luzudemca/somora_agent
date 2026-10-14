@@ -76,7 +76,6 @@ type ChatTurnDeps = ChatTurnResolveDeps;
 type PublishFn = (event: unknown) => Promise<void> | void;
 type PublishEvent = (agent: string, session: string, event: unknown) => Promise<void> | void;
 let injectedChatTurnDeps: ChatTurnDeps | null = null;
-let injectedPublishEvent: PublishEvent | null = null;
 let completedRetentionDays = 7;
 
 export function configureSentinel(args: {
@@ -85,9 +84,8 @@ export function configureSentinel(args: {
   completedRetentionDays?: number;
 }): void {
   injectedChatTurnDeps = args.chatTurnDeps;
-  // publishEvent is accepted for compatibility; a fire streams through
-  // startTurn's boot-wired broadcast since 2026-09-13.
-  if (args.publishEvent) injectedPublishEvent = args.publishEvent;
+  // publishEvent is accepted for compatibility and not used: a fire
+  // streams through startTurn's boot-wired broadcast since 2026-09-13.
   if (typeof args.completedRetentionDays === 'number') {
     completedRetentionDays = args.completedRetentionDays;
   }
@@ -814,24 +812,6 @@ function installStoreWatcher(): void {
     dir: SENTINEL_DIR,
     file: TRIGGERS_PATH,
   });
-}
-
-/** Stop the scheduler — used in tests; production never stops it. */
-export function stopSentinel(): void {
-  if (nextTimer) {
-    clearTimeout(nextTimer);
-    nextTimer = null;
-    nextFireAt = null;
-  }
-  if (watcherReloadTimer) {
-    clearTimeout(watcherReloadTimer);
-    watcherReloadTimer = null;
-  }
-  if (storeWatcher) {
-    void storeWatcher.close();
-    storeWatcher = null;
-  }
-  started = false;
 }
 
 /** Diagnostic — exposed for /sentinel/state and tests. */

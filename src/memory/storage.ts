@@ -365,12 +365,6 @@ export function replaceFileChunks(
   tx();
 }
 
-export function listChunksByFile(memDb: MemoryDb, path: string): ChunkRow[] {
-  return memDb.db
-    .prepare(`SELECT * FROM chunks WHERE file_path = ? ORDER BY start_line`)
-    .all(path) as ChunkRow[];
-}
-
 export function listAllFiles(memDb: MemoryDb, source?: string): FileRow[] {
   if (source) {
     return memDb.db

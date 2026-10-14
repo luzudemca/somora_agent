@@ -19,7 +19,6 @@
 import { access, mkdir, rename } from 'node:fs/promises';
 import { basename, dirname, extname } from 'node:path';
 import type { SessionMetaStore } from '../engine/types.ts';
-import type { ToolGating } from '../tools/gating.ts';
 import type { TurnOrigin } from '../types/turn-origin.ts';
 
 export type BuilderMode = 'attended' | 'unattended';
@@ -180,15 +179,6 @@ export function renderBuilderSessionBlock(state: BuilderSessionState | null, opt
     );
   }
   return lines.join('\n');
-}
-
-/** Persona gating + session state as one predicate for a tool list. */
-export function builderToolPredicate(
-  gatingCheck: (name: string, toolset: string | undefined, gating: ToolGating | undefined) => boolean,
-  gating: ToolGating | undefined,
-  state: BuilderSessionState | null,
-): (name: string, toolset: string | undefined) => boolean {
-  return (name, toolset) => gatingCheck(name, toolset, gating) && builderSessionAllows(state, name);
 }
 
 /**

@@ -114,14 +114,3 @@ export function startVideoRunner(getConfig: () => Config): void {
   void tick(getConfig);
   logger.info({ msg: 'videogen.runner_started', intervalMs });
 }
-
-export function stopVideoRunner(): void {
-  if (timer) clearInterval(timer);
-  timer = null;
-}
-
-/** Used by tests and by the boot log — how much is in flight. */
-export async function runnerSnapshot(): Promise<{ active: number; total: number }> {
-  const all = await listJobs();
-  return { active: all.filter(isActive).length, total: all.length };
-}

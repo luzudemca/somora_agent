@@ -37,7 +37,6 @@ type ChatTurnDeps = ChatTurnResolveDeps;
 type PublishEvent = (agent: string, session: string, event: unknown) => Promise<void> | void;
 
 let injectedChatTurnDeps: ChatTurnDeps | null = null;
-let injectedPublishEvent: PublishEvent | null = null;
 
 /** Server boot wires runChatTurn deps + the SSE publisher here — same
  *  pattern as configureSentinel. publishEvent is mandatory-by-lesson
@@ -48,9 +47,8 @@ export function configureTmuxAttention(args: {
   publishEvent?: PublishEvent;
 }): void {
   injectedChatTurnDeps = args.chatTurnDeps;
-  // publishEvent is accepted for compatibility; the wake turn streams
-  // through startTurn's boot-wired broadcast since 2026-09-13.
-  if (args.publishEvent) injectedPublishEvent = args.publishEvent;
+  // publishEvent is accepted for compatibility and not used: the wake
+  // turn streams through startTurn's boot-wired broadcast since 2026-09-13.
 }
 
 /** How many pane lines the watcher inspects per tick. The markers all
@@ -264,9 +262,4 @@ export function startTmuxAttentionWatcher(config: TmuxAttentionConfig): void {
   if (watcher) return;
   watcher = new TmuxAttentionWatcher(config);
   watcher.start();
-}
-
-export function stopTmuxAttentionWatcher(): void {
-  watcher?.stop();
-  watcher = null;
 }

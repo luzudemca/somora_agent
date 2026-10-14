@@ -24,7 +24,6 @@ import {
   type CanUseTool,
   type SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk';
-import OpenAI from 'openai';
 import { createPatientOpenAIClient } from '../server/openai-client.ts';
 import { userTagParam } from '../engine/user-tag.ts';
 import type { ResolvedModel } from '../config/types.ts';
@@ -147,23 +146,6 @@ export function extractCompactionRange(
     throughTs,
     priorSummary: latestPrior?.summary,
   };
-}
-
-/**
- * Pick the worker model for compaction.
- *   - if `override` matches one of the candidates, use it (caller
- *     must check fit themselves — overrides are honored as-is)
- *   - otherwise: smallest candidate whose contextWindow >=
- *     estimatedTokens * HEADROOM_FACTOR
- *   - if no candidate fits, returns null — caller should hard-fail
- *     with a clear message (Map-Reduce is Phase 3, not implemented)
- */
-export function pickCompactionModel(
-  estimatedTokens: number,
-  candidates: ResolvedModel[],
-  override?: ResolvedModel,
-): ResolvedModel | null {
-  return rankCompactionModels(estimatedTokens, candidates, { override })[0] ?? null;
 }
 
 /** How many workers one compaction may ask before it gives up. Each

@@ -14,7 +14,7 @@
 import { appendFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { blacklistReasons, checkBlacklist, splitCommandSegments, stripSegmentWrapping } from './blacklist.ts';
 
 const SOMORA_HOME = process.env.SOMORA_HOME ?? join(homedir(), '.somora');
@@ -229,5 +229,3 @@ export async function auditPrivilegedExec(entry: AuditEntry): Promise<void> {
     // option to also logger.warn() if it cares about the failure.
   }
 }
-
-export const AUDIT_LOG_PATH = AUDIT_PATH;

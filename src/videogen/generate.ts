@@ -14,7 +14,7 @@ import type { OpenAiCompatibleProvider } from '../config/types.ts';
 import { logger } from '../server/logger.ts';
 import { forgetCatalog, paramInfos, resolveCapabilities, validateSpecs } from '../media/capabilities.ts';
 import type { ModelCapabilities } from '../imagegen/types.ts';
-import { linkMedia, storeMedia } from '../media/store.ts';
+import { storeMedia } from '../media/store.ts';
 import { newMediaId, writeRecord } from '../media/records.ts';
 import type { MediaRecord } from '../media/types.ts';
 import { readVideoMeta } from '../multimodal/dimensions.ts';
@@ -548,12 +548,3 @@ async function collect(job: VideoJob, state: JobState, config: Config): Promise<
 }
 
 export { isActive, readJob };
-export async function linkFinished(job: VideoJob, dest: string): Promise<string | null> {
-  if (!job.path) return null;
-  try {
-    return await linkMedia(job.path, dest);
-  } catch (err) {
-    logger.warn({ msg: 'videogen.link_failed', job: job.id, err: (err as Error).message });
-    return null;
-  }
-}
