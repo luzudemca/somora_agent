@@ -60,7 +60,7 @@ import {
  * (dream, engine spawn, MCP children). Tool dispatchers (exec, tmux)
  * pass true unless the agent explicitly opts into env-inheritance.
  */
-function buildSpawnEnv(
+export function buildSpawnEnv(
   callerEnv?: Record<string, string>,
   opts?: { stripSomoraInternal?: boolean; skillEnvScope?: SkillEnvScope },
 ): NodeJS.ProcessEnv {

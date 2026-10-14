@@ -47,6 +47,9 @@ import {
   isDailyCapResumeDue,
 } from './schedule.ts';
 import { buildFireFrame } from './dispatcher.ts';
+import { bootCheck, checkDueAt, checksRunning, isCheckTrigger, startDueCheck, type CheckLoopDeps, type CheckWake, type FireOutcome } from './check-loop.ts';
+import { forgetCheckStates } from './check-store.ts';
+import type { Config } from '../config/types.ts';
 import {
   countFiresToday,
   deleteTrigger,
@@ -77,13 +80,17 @@ type PublishFn = (event: unknown) => Promise<void> | void;
 type PublishEvent = (agent: string, session: string, event: unknown) => Promise<void> | void;
 let injectedChatTurnDeps: ChatTurnDeps | null = null;
 let completedRetentionDays = 7;
+let getConfig: () => Config | undefined = () => undefined;
 
 export function configureSentinel(args: {
   chatTurnDeps: ChatTurnDeps;
   publishEvent?: PublishEvent;
   completedRetentionDays?: number;
+  /** The live config — check triggers read their limits per check. */
+  getConfig?: () => Config | undefined;
 }): void {
   injectedChatTurnDeps = args.chatTurnDeps;
+  if (args.getConfig) getConfig = args.getConfig;
   // publishEvent is accepted for compatibility and not used: a fire
   // streams through startTurn's boot-wired broadcast since 2026-09-13.
   if (typeof args.completedRetentionDays === 'number') {
@@ -178,12 +185,26 @@ let watcherReloadTimer: NodeJS.Timeout | null = null;
 // finally block.
 const inflightFires = new Set<string>();
 
+const checkDeps: CheckLoopDeps = {
+  config: () => getConfig(),
+  fire: (trigger, wake) => fireTrigger(trigger, { catchUp: false, testMode: false, check: wake }),
+  reschedule: () => reschedule(),
+};
+
 /** Compute the next fire instant across ALL active triggers + a Trigger
  *  pointer. Returns null when no triggers are armed. */
 function pickNextDue(now: number = Date.now()): { trigger: Trigger; fireAt: number } | null {
   let pick: { trigger: Trigger; fireAt: number } | null = null;
   for (const t of listTriggers()) {
     if (t.status !== 'active') continue;
+    // A check trigger keeps its due time in its check state, and is
+    // not picked while its check runs (check-loop.ts). A wake it
+    // started may still be running — checking on is fine meanwhile.
+    if (isCheckTrigger(t)) {
+      const at = checkDueAt(t, now);
+      if (at !== null && (!pick || at < pick.fireAt)) pick = { trigger: t, fireAt: at };
+      continue;
+    }
     if (!t.nextFireAt) continue;
     // A trigger whose previous fire is still running must not be
     // re-picked — its in-memory cache state (e.g. nextFireAt) hasn't
@@ -195,7 +216,6 @@ function pickNextDue(now: number = Date.now()): { trigger: Trigger; fireAt: numb
       pick = { trigger: t, fireAt };
     }
   }
-  void now;
   return pick;
 }
 
@@ -219,7 +239,8 @@ export function reschedule(): void {
     wakeReason = 'daily_cap_resume';
   }
   if (wakeAt === null) {
-    logger.info({ msg: 'sentinel.scheduler.idle', reason: 'no active triggers with future fire' });
+    // A running check re-arms the timer when it ends.
+    if (checksRunning() === 0) logger.info({ msg: 'sentinel.scheduler.idle', reason: 'no active triggers with future fire' });
     return;
   }
   const delay = Math.max(0, wakeAt - Date.now());
@@ -285,6 +306,12 @@ async function onTimer(): Promise<void> {
     reschedule();
     return;
   }
+  if (isCheckTrigger(pick.trigger)) {
+    // Runs on its own; its end re-arms the timer.
+    startDueCheck(pick.trigger, checkDeps);
+    reschedule();
+    return;
+  }
   await fireTrigger(pick.trigger, { catchUp: false, testMode: false });
   reschedule();
 }
@@ -292,6 +319,8 @@ async function onTimer(): Promise<void> {
 interface FireOptions {
   catchUp: boolean;
   testMode: boolean;
+  /** A check trigger's wake: what the check saw goes into the evidence. */
+  check?: CheckWake;
 }
 
 /** Fire a trigger NOW. Used by the scheduled timer, by boot catch-up,
@@ -299,7 +328,7 @@ interface FireOptions {
 export async function fireTrigger(
   trigger: Trigger,
   opts: FireOptions = { catchUp: false, testMode: false },
-): Promise<void> {
+): Promise<FireOutcome> {
   const now = new Date();
   const scheduledFor = trigger.nextFireAt ?? now.toISOString();
 
@@ -315,7 +344,7 @@ export async function fireTrigger(
         ...(opts.catchUp ? { catchUp: true } : {}),
       });
       await advanceNextFire(trigger);
-      return;
+      return 'skipped';
     }
   }
 
@@ -342,7 +371,7 @@ export async function fireTrigger(
       };
       await saveTrigger(updated);
       reschedule();
-      return;
+      return 'skipped';
     }
   }
 
@@ -352,7 +381,7 @@ export async function fireTrigger(
   // Make sure the agent exists; never silently swallow this.
   if (!(await loadPersona(dispatch.agent))) {
     await markError(trigger, `agent '${dispatch.agent}' not found`, scheduledFor, now, opts.catchUp);
-    return;
+    return 'error';
   }
 
   // Resolve session — auto-create with timestamp prefix if not existing,
@@ -370,7 +399,7 @@ export async function fireTrigger(
     session = resolved;
   } catch (err) {
     await markError(trigger, `session resolution failed: ${(err as Error).message}`, scheduledFor, now, opts.catchUp);
-    return;
+    return 'error';
   }
 
   // Concurrency cap (same as /spawn-async)
@@ -385,14 +414,14 @@ export async function fireTrigger(
       ...(opts.testMode ? { testMode: true } : {}),
     });
     await advanceNextFire(trigger);
-    return;
+    return 'skipped';
   }
 
   const taskId = newTaskId();
   // The record is the trigger's prompt; the evidence block travels
   // beside it (turn-framing.ts).
   const prompt = dispatch.prompt;
-  const frame = buildFireFrame(trigger, now, opts.catchUp);
+  const frame = buildFireFrame(trigger, now, opts.catchUp, opts.check);
   registerTask({
     task_id: taskId,
     parent_agent: 'sentinel',
@@ -422,7 +451,7 @@ export async function fireTrigger(
     });
     releaseSpawnSlot(dispatch.agent);
     await markError(trigger, 'sentinel not initialized (no chatTurnDeps)', scheduledFor, now, opts.catchUp, taskId, opts.testMode);
-    return;
+    return 'error';
   }
 
   const deps = injectedChatTurnDeps;
@@ -516,6 +545,7 @@ export async function fireTrigger(
       inflightFires.delete(trigger.id);
     }
   })();
+  return 'started';
 }
 
 /** Dispatch a test fire from any process.
@@ -627,6 +657,10 @@ async function advanceNextFire(trigger: Trigger): Promise<void> {
 /** Apply catch-up policy to a freshly-loaded trigger at boot. */
 async function applyBootCatchUp(t: Trigger): Promise<void> {
   if (t.status !== 'active') return;
+  if (isCheckTrigger(t)) {
+    await bootCheck(t);
+    return;
+  }
   if (t.source.type !== 'time') return;
 
   const now = Date.now();
@@ -790,6 +824,7 @@ function installStoreWatcher(): void {
       watcherReloadTimer = null;
       try {
         await loadTriggers();
+        forgetCheckStates();
         logger.info({
           msg: 'sentinel.scheduler.store_reloaded',
           event,

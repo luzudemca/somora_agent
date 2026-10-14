@@ -18,7 +18,7 @@ import { readFileSync, writeFileSync, renameSync, mkdirSync, chmodSync } from 'n
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 
-export type InboxKind = 'update' | 'news' | 'config' | 'login' | 'tls' | 'dream' | 'mcp' | 'model';
+export type InboxKind = 'update' | 'news' | 'config' | 'login' | 'tls' | 'dream' | 'mcp' | 'model' | 'sentinel';
 export type InboxLevel = 'info' | 'warning' | 'important';
 export type InboxMute = 'until-resolved' | 'forever';
 

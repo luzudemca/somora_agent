@@ -211,7 +211,7 @@ gone for a day).
 | Field | Meaning |
 |---|---|
 | `key` | Stable per thing, e.g. `update:<version>`, `news:<hash>`, `config`, `login:claude-cli`, `login:openai-compatible:<provider>`, `login:mcp:<server>`, `tls`, `rem:<agent>`, `deep:<agent>/<slug>`, `lucid`, `mcp:<server>`, `model:<provider/id>`. |
-| `kind` | `update`, `news`, `config`, `login`, `tls`, `dream`, `mcp`, `model`. |
+| `kind` | `update`, `news`, `config`, `login`, `tls`, `dream`, `mcp`, `model`, `sentinel`. |
 | `level` | `info`, `warning`, `important`. |
 | `title`, `text`, `url?` | Plain text. `url` is `https://` only. |
 | `firstSeen`, `lastSeen`, `count` | Epoch ms; `count` counts events, a checked state stays `1`. |

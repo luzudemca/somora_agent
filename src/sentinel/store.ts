@@ -22,6 +22,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { isPidAlive } from '../server/lockfile.ts';
 import { logger } from '../server/logger.ts';
+import { removeCheckFiles } from './check-store.ts';
 import type { Trigger, FireHistoryEntry } from './types.ts';
 import { SENTINEL_LIMITS } from './types.ts';
 
@@ -187,6 +188,9 @@ export async function deleteTrigger(id: string): Promise<boolean> {
   } catch {
     // History never written or already gone — fine.
   }
+  // A check trigger's script copy, its folder and its state go with it.
+  await removeCheckFiles(id).catch(() => {});
+  logger.info({ msg: 'sentinel.trigger.deleted', triggerId: id });
   return true;
 }
 

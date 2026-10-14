@@ -136,6 +136,22 @@ const state = (over: Partial<InboxStateSources> = {}): InboxStateSources => ({
   ...over,
 });
 
+test('log: a paused Sentinel check is one entry per trigger; its next check after a resume, or deleting it, closes it', () => {
+  const { inbox } = fresh();
+  inboxFromLog(inbox, { msg: 'sentinel.check.paused', triggerId: 'gpu-wait-x1', name: 'gpu wait', agent: 'ada', kind: 'error', reason: '3 check errors in a row. Last: exit code 7' });
+  inboxFromLog(inbox, { msg: 'sentinel.check.paused', triggerId: 'mail-y2', name: 'mail', agent: 'ada', kind: 'cap', reason: '24 wake-ups today' });
+  const [cap, err] = [inbox.list().find((e) => e.key === 'sentinel:mail-y2')!, inbox.list().find((e) => e.key === 'sentinel:gpu-wait-x1')!];
+  assert.equal(err.kind, 'sentinel');
+  assert.equal(err.level, 'warning');
+  assert.match(err.title, /gpu wait/);
+  assert.match(err.text, /exit code 7/);
+  assert.equal(cap.level, 'info');
+  assert.match(cap.title, /until tomorrow/);
+  inboxFromLog(inbox, { msg: 'sentinel.check.resumed', triggerId: 'gpu-wait-x1' });
+  inboxFromLog(inbox, { msg: 'sentinel.trigger.deleted', triggerId: 'mail-y2' });
+  assert.equal(inbox.list().every((e) => e.resolvedAt !== undefined), true);
+});
+
 test('state: an update, then the next one replaces it; the same note is never two entries', () => {
   const { inbox } = fresh();
   inboxFromState(inbox, state({ update: () => ({ updateAvailable: true, latestVersion: '2026.1013.1', note: 'Hello', enabled: true }) }));

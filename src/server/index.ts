@@ -1166,6 +1166,7 @@ export const voiceCalls = new VoiceCallManager({
 configureSentinel({
   chatTurnDeps,
   completedRetentionDays: config.sentinel.completedRetentionDays,
+  getConfig: () => config,
   // Wire SSE broadcast so sentinel-driven turns stream live to
   // subscribed clients exactly like /chat/send turns do. Without
   // this, the woken agent's reaction shows up in JSONL on disk but

@@ -34,7 +34,34 @@ export type TimeSpec =
 export type WeekDay = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
 
 export type Source =
-  | { type: 'time'; spec: TimeSpec };
+  | { type: 'time'; spec: TimeSpec }
+  | CheckSource;
+
+/** Phase 2 (private/sentinel-phase2/KONZEPT.md): a script checks before
+ *  the agent is woken. The script is somora's copy, made at creation. */
+export interface CheckSource {
+  type: 'check';
+  /** What the check watches, shown in every wake and in the web client
+   *  ("the model server switched to glm and answers", not "status check"). */
+  description: string;
+  /** Between two checks: "15s", "5m". Floors in config sentinel.checks. */
+  interval: string;
+  /** `once`: wake on the first positive check, then done (deadline
+   *  required). `watch`: keep checking, wake on a change. */
+  mode: 'once' | 'watch';
+  /** ISO. A `once` check that is not ready by then wakes once with its
+   *  last state and ends. */
+  deadline?: string;
+  /** The copy under sentinel/scripts/<id>/ and its fingerprint. */
+  script: { file: string; lang: CheckScriptLang; sha256: string };
+  /** Per-check time limit; default config sentinel.checks.timeoutMs. */
+  timeoutMs?: number;
+  /** `watch` only: the first check may wake too (default: it only takes
+   *  the starting state). */
+  notifyOnFirst?: boolean;
+}
+
+export type CheckScriptLang = 'sh' | 'python' | 'node';
 
 // Phase 2+ will add: { type: 'http_json'; url; interval; jsonPath?; method?; headers? }
 // Phase 2+ will add: { type: 'exec'; command; cwd?; interval; outputAs: 'json'|'exit_code'|'stdout' }
@@ -50,7 +77,18 @@ export type Source =
  *  evaluator later is a new branch + a new handler, no breaking
  *  change to existing triggers. */
 export type Evaluator =
-  | { type: 'none' };
+  | { type: 'none' }
+  /** Art 1: the script's `ready` decides. */
+  | { type: 'ready' }
+  /** Art 2: the script's `data` goes to the decision model; `wake`
+   *  decides on its answer. Only with a decision model configured. */
+  | { type: 'decision'; questions: Record<string, unknown>; wake: DecisionWakeRule };
+
+/** When an Art 2 answer wakes the agent. */
+export type DecisionWakeRule =
+  | { question: string; minProbability: number }
+  | { question: string; choice: string; minConfidence?: number }
+  | { question: string; minScore: number };
 
 // Phase 2+: { type: 'expression'; expression: string }
 // Phase 2+: { type: 'regex'; pattern: string; flags?: string }
@@ -219,3 +257,52 @@ export const SENTINEL_LIMITS = {
    *  spawning 8000 fires on next boot. */
   MAX_BACKFILL_FIRES: 24,
 } as const;
+
+// ─────────────────────────────────────────────────────────────────────
+// Check state (phase 2) — kept apart from triggers.json
+// ─────────────────────────────────────────────────────────────────────
+
+/** What one check produced, as somora understood it. */
+export interface CheckResult {
+  at: string;
+  ms: number;
+  /** `ok`: the script ran and answered by the contract. */
+  ok: boolean;
+  ready?: boolean;
+  summary?: string;
+  /** Kept short; the full data goes into the wake. */
+  dataPreview?: string;
+  final?: 'failed';
+  /** Art 2. */
+  decision?: { question: string; value: number | string; detail?: string };
+  error?: string;
+  /** `temporary` (timeout, unreachable): retried; `permanent` (script
+   *  missing or changed, broken output): counts straight toward pause. */
+  errorClass?: 'temporary' | 'permanent';
+}
+
+/** Runtime state of a check trigger, one file per trigger under
+ *  sentinel/check-state/. Written after every check, so it lives
+ *  outside the watched triggers.json. */
+export interface CheckState {
+  triggerId: string;
+  /** When checking started (for the deadline of a `once` check). */
+  startedAt: string;
+  nextCheckAt?: string;
+  checkCount: number;
+  wakeCount: number;
+  errorStreak: number;
+  /** `watch` + Art 1: the last `ready`, for the change false → true. */
+  lastReady?: boolean;
+  /** Art 2: fingerprint of the last data, so the same data never wakes twice. */
+  lastDataHash?: string;
+  /** `watch`: the first check only takes the starting state. */
+  baselineTaken: boolean;
+  last?: CheckResult;
+  /** Wakes per UTC day, for config sentinel.checks.maxWakesPerDay. */
+  wakesToday?: { day: string; count: number };
+  /** Set when the check paused the trigger (errors or the wake cap);
+   *  cleared on the first check after a resume, which also closes the
+   *  inbox notice. */
+  pausedAt?: string;
+}

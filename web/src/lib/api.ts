@@ -292,7 +292,7 @@ export interface MediaRecordDto extends ImageRecordDto {
 /** One notice in the inbox (GET /inbox). */
 export interface InboxEntryDto {
   key: string;
-  kind: 'update' | 'news' | 'config' | 'login' | 'tls' | 'dream' | 'mcp' | 'model';
+  kind: 'update' | 'news' | 'config' | 'login' | 'tls' | 'dream' | 'mcp' | 'model' | 'sentinel';
   level: 'info' | 'warning' | 'important';
   title: string;
   text: string;

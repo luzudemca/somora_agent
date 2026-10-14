@@ -146,6 +146,30 @@ export function inboxFromLog(inbox: Inbox, line: Record<string, unknown>): void 
       inbox.resolve('lucid');
       return;
 
+    // ── Sentinel checks ──
+    case 'sentinel.check.paused': {
+      const id = str(line.triggerId);
+      if (!id) return;
+      const name = str(line.name) || id;
+      const agent = str(line.agent);
+      const cap = str(line.kind) === 'cap';
+      inbox.raise(`sentinel:${id}`, {
+        kind: 'sentinel',
+        level: cap ? 'info' : 'warning',
+        title: cap ? `Sentinel check "${name}" waits until tomorrow` : `Sentinel check "${name}" stopped`,
+        text: cap
+          ? `It woke ${agent || 'its agent'} as often as one day allows and starts again after midnight UTC. ${str(line.reason)}`
+          : `${str(line.reason)}\n\nIt no longer checks or wakes ${agent || 'its agent'}. Resume it in the Sentinel window once the cause is fixed, or ask the agent to update the script.`,
+      });
+      return;
+    }
+    case 'sentinel.check.resumed':
+    case 'sentinel.trigger.deleted': {
+      const id = str(line.triggerId);
+      if (id) inbox.resolve(`sentinel:${id}`);
+      return;
+    }
+
     // ── Logins ──
     case 'turn.engine_init': {
       const turnId = str(line.turnId);

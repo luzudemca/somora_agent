@@ -1854,8 +1854,58 @@ export const SentinelConfigSchema = z
      *  paths that haven't been resumed). Counted from `lastFireAt`.
      *  Defaults to 7. Set to 0 to disable auto-GC. */
     completedRetentionDays: z.number().int().min(0).max(3650).default(7),
+    /**
+     * Check triggers (Sentinel phase 2, private/sentinel-phase2/KONZEPT.md):
+     * a script checks before the agent is woken. Limits per check and for
+     * all checks together. A change applies to the next check.
+     */
+    checks: z
+      .object({
+        /** Shortest interval for a "once" check, which must have a deadline. */
+        minIntervalOnceMs: z.number().int().min(1000).default(15_000),
+        /** Shortest interval for every other check. */
+        minIntervalMs: z.number().int().min(1000).default(60_000),
+        /** Longest deadline a "once" check may set. */
+        maxDeadlineMs: z.number().int().min(60_000).default(24 * 60 * 60 * 1000),
+        /** Time a check may run, unless the trigger asks for less or more. */
+        timeoutMs: z.number().int().min(1000).default(30_000),
+        /** The most a trigger may ask for. */
+        maxTimeoutMs: z.number().int().min(1000).default(120_000),
+        /** Script output kept; more is a check error. */
+        maxOutputBytes: z.number().int().min(1024).default(65_536),
+        /** Checks running at the same time, all triggers together. */
+        maxConcurrent: z.number().int().min(1).max(64).default(4),
+        /** Check errors in a row before the trigger pauses. */
+        errorStreak: z.number().int().min(1).max(100).default(3),
+        /** Wake-ups a check trigger may cause per day before it pauses. */
+        maxWakesPerDay: z.number().int().min(1).max(1000).default(24),
+      })
+      .default({
+        minIntervalOnceMs: 15_000,
+        minIntervalMs: 60_000,
+        maxDeadlineMs: 24 * 60 * 60 * 1000,
+        timeoutMs: 30_000,
+        maxTimeoutMs: 120_000,
+        maxOutputBytes: 65_536,
+        maxConcurrent: 4,
+        errorStreak: 3,
+        maxWakesPerDay: 24,
+      }),
   })
-  .default({ completedRetentionDays: 7 });
+  .default({
+    completedRetentionDays: 7,
+    checks: {
+      minIntervalOnceMs: 15_000,
+      minIntervalMs: 60_000,
+      maxDeadlineMs: 24 * 60 * 60 * 1000,
+      timeoutMs: 30_000,
+      maxTimeoutMs: 120_000,
+      maxOutputBytes: 65_536,
+      maxConcurrent: 4,
+      errorStreak: 3,
+      maxWakesPerDay: 24,
+    },
+  });
 export type SentinelConfig = z.infer<typeof SentinelConfigSchema>;
 
 // The daily update check (src/server/update-check.ts): the one request

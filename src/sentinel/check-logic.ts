@@ -1,0 +1,194 @@
+// What happens after a check (Sentinel phase 2) — pure, no clock, no
+// files, so every case can be tested on its own. The scheduler runs the
+// script (check-runner.ts), asks here, persists the new state BEFORE it
+// wakes anyone (a crash between the two must not wake twice), then acts.
+//
+// Rules (private/sentinel-phase2/KONZEPT.md, decisions E1–E4):
+//   once  — wake on the first `ready`, then done. Past the deadline:
+//           wake once with the last state, then done.
+//   watch — the first check only takes the starting state (unless
+//           notifyOnFirst); then wake on the change not-ready → ready
+//           (Art 1) or on new data the decision model rates high (Art 2).
+//   final: "failed" — wake at once, then done, in either mode.
+//   Errors — a permanent one (script missing or changed) pauses at
+//           once; others count, with a growing pause between retries,
+//           and pause after config sentinel.checks.errorStreak.
+//   Wakes per day are capped (maxWakesPerDay); the cap pauses until the
+//           next UTC day.
+
+import { createHash } from 'node:crypto';
+import type { CheckResult, CheckSource, CheckState, Evaluator } from './types.ts';
+import type { CheckRunOutcome } from './check-runner.ts';
+
+export interface CheckLimits {
+  errorStreak: number;
+  maxWakesPerDay: number;
+}
+
+export type WakeReason = 'ready' | 'changed' | 'first' | 'decision' | 'final-failed' | 'deadline';
+
+export interface CheckStep {
+  state: CheckState;
+  wake?: { reason: WakeReason; data?: unknown };
+  /** Mark the trigger completed, with this reason. */
+  complete?: string;
+  /** Pause the trigger: `error` (errors) or `cap` (wakes today, resumes tomorrow). */
+  pause?: { kind: 'error' | 'cap'; reason: string };
+  /** Art 2: the data must go to the decision model first. */
+  needDecision?: { data: unknown; hash: string };
+}
+
+const BACKOFF_BASE_MS = 30_000;
+const BACKOFF_MAX_MS = 15 * 60_000;
+
+export function utcDay(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/** Stable text of the data, so the same data has the same fingerprint
+ *  however the script ordered its keys. */
+export function stableJson(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(stableJson).join(',')}]`;
+  if (v && typeof v === 'object') {
+    return `{${Object.keys(v as Record<string, unknown>).sort().map((k) => `${JSON.stringify(k)}:${stableJson((v as Record<string, unknown>)[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(v) ?? 'null';
+}
+
+export function dataHash(data: unknown): string {
+  return createHash('sha256').update(stableJson(data)).digest('hex').slice(0, 32);
+}
+
+export function initialCheckState(triggerId: string, now: Date): CheckState {
+  return { triggerId, startedAt: now.toISOString(), checkCount: 0, wakeCount: 0, errorStreak: 0, baselineTaken: false };
+}
+
+/** The next check after an error: the interval, or longer while errors repeat. */
+export function nextAfterError(intervalMs: number, streak: number): number {
+  return Math.min(Math.max(intervalMs, BACKOFF_BASE_MS * 2 ** Math.max(0, streak - 1)), Math.max(intervalMs, BACKOFF_MAX_MS));
+}
+
+function preview(data: unknown): string | undefined {
+  if (data === undefined) return undefined;
+  const s = typeof data === 'string' ? data : stableJson(data);
+  return s.length > 300 ? `${s.slice(0, 300)}…` : s;
+}
+
+/** Count a wake against today's cap, or say it is used up. */
+function chargeWake(state: CheckState, now: Date, limits: CheckLimits): CheckState | null {
+  const day = utcDay(now);
+  const today = state.wakesToday?.day === day ? state.wakesToday.count : 0;
+  if (today >= limits.maxWakesPerDay) return null;
+  return { ...state, wakeCount: state.wakeCount + 1, wakesToday: { day, count: today + 1 } };
+}
+
+function withWake(step: CheckStep, now: Date, limits: CheckLimits): CheckStep {
+  if (!step.wake) return step;
+  const charged = chargeWake(step.state, now, limits);
+  if (charged) return { ...step, state: charged };
+  const { wake: _dropped, complete: _c, ...rest } = step;
+  return { ...rest, pause: { kind: 'cap', reason: `${limits.maxWakesPerDay} wake-ups today (sentinel.checks.maxWakesPerDay) — resumes tomorrow` } };
+}
+
+/** After the script ran. */
+export function afterRun(args: {
+  source: CheckSource;
+  evaluator: Evaluator;
+  state: CheckState;
+  run: CheckRunOutcome;
+  now: Date;
+  limits: CheckLimits;
+}): CheckStep {
+  const { source, evaluator, run, now, limits } = args;
+  const base: CheckState = { ...args.state, checkCount: args.state.checkCount + 1 };
+  const result: CheckResult = { at: now.toISOString(), ms: run.ms, ok: run.ok };
+
+  if (!run.ok) {
+    result.error = run.error;
+    result.errorClass = run.errorClass;
+    const streak = base.errorStreak + 1;
+    const state: CheckState = { ...base, errorStreak: streak, last: result };
+    if (run.errorClass === 'permanent') return { state, pause: { kind: 'error', reason: run.error } };
+    if (streak >= limits.errorStreak) return { state, pause: { kind: 'error', reason: `${streak} check errors in a row. Last: ${run.error}` } };
+    return { state };
+  }
+
+  const a = run.answer;
+  if (a.summary !== undefined) result.summary = a.summary;
+  if (a.ready !== undefined) result.ready = a.ready;
+  const pv = preview(a.data);
+  if (pv !== undefined) result.dataPreview = pv;
+  if (a.final) result.final = a.final;
+  let state: CheckState = { ...base, errorStreak: 0, last: result };
+
+  if (a.final === 'failed') {
+    return withWake({ state, wake: { reason: 'final-failed', data: a.data }, complete: 'the check reported a final failure' }, now, limits);
+  }
+
+  const pastDeadline = source.mode === 'once' && source.deadline !== undefined && now.getTime() >= new Date(source.deadline).getTime();
+
+  if (evaluator.type === 'decision') {
+    const hash = dataHash(a.data);
+    if (source.mode === 'watch' && !state.baselineTaken) {
+      state = { ...state, baselineTaken: true, lastDataHash: hash };
+      if (!source.notifyOnFirst) return { state };
+      return { state, needDecision: { data: a.data, hash } };
+    }
+    if (state.lastDataHash === hash) {
+      if (pastDeadline) return withWake({ state, wake: { reason: 'deadline', data: a.data }, complete: 'deadline passed' }, now, limits);
+      return { state };
+    }
+    return { state, needDecision: { data: a.data, hash } };
+  }
+
+  // Art 1
+  const ready = a.ready === true;
+  if (source.mode === 'once') {
+    if (ready) return withWake({ state, wake: { reason: 'ready', data: a.data }, complete: 'condition met' }, now, limits);
+    if (pastDeadline) return withWake({ state, wake: { reason: 'deadline', data: a.data }, complete: 'deadline passed without the condition' }, now, limits);
+    return { state };
+  }
+  if (!state.baselineTaken) {
+    state = { ...state, baselineTaken: true, lastReady: ready };
+    if (ready && source.notifyOnFirst) return withWake({ state, wake: { reason: 'first', data: a.data } }, now, limits);
+    return { state };
+  }
+  const was = state.lastReady === true;
+  state = { ...state, lastReady: ready };
+  if (ready && !was) return withWake({ state, wake: { reason: 'changed', data: a.data } }, now, limits);
+  return { state };
+}
+
+/** Art 2, after the decision model answered (or failed). `value` is the
+ *  number or choice the wake rule looked at. */
+export function afterDecision(args: {
+  source: CheckSource;
+  state: CheckState;
+  hash: string;
+  data: unknown;
+  outcome: { ok: true; wake: boolean; question: string; value: number | string; detail?: string } | { ok: false; error: string };
+  now: Date;
+  limits: CheckLimits;
+}): CheckStep {
+  const { source, hash, data, outcome, now, limits } = args;
+  const last: CheckResult = { ...(args.state.last ?? { at: now.toISOString(), ms: 0, ok: true }) };
+  if (!outcome.ok) {
+    // Not reachable or refused: no wake, a check error (decision 5) —
+    // and the data stays unseen, so it is judged again next time.
+    last.ok = false;
+    last.error = `decision model: ${outcome.error}`;
+    last.errorClass = 'temporary';
+    const streak = args.state.errorStreak + 1;
+    const state: CheckState = { ...args.state, errorStreak: streak, last };
+    if (streak >= limits.errorStreak) return { state, pause: { kind: 'error', reason: `${streak} check errors in a row. Last: ${last.error}` } };
+    return { state };
+  }
+  last.decision = { question: outcome.question, value: outcome.value, ...(outcome.detail ? { detail: outcome.detail } : {}) };
+  const state: CheckState = { ...args.state, lastDataHash: hash, errorStreak: 0, last };
+  const pastDeadline = source.mode === 'once' && source.deadline !== undefined && now.getTime() >= new Date(source.deadline).getTime();
+  if (outcome.wake) {
+    return withWake({ state, wake: { reason: 'decision', data }, ...(source.mode === 'once' ? { complete: 'condition met' } : {}) }, now, limits);
+  }
+  if (pastDeadline) return withWake({ state, wake: { reason: 'deadline', data }, complete: 'deadline passed without the condition' }, now, limits);
+  return { state };
+}
