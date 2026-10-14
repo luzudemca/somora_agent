@@ -17,6 +17,7 @@ import { createHash } from 'node:crypto';
 import type { Config } from '../config/types.ts';
 import { logger } from '../server/logger.ts';
 import { afterDecision, afterRun, initialCheckState, nextAfterError, type CheckLimits, type CheckStep, type WakeReason } from './check-logic.ts';
+import { judgeCheckData } from './check-judge.ts';
 import { runCheck } from './check-runner.ts';
 import { cachedCheckState, loadCheckState, saveCheckState } from './check-store.ts';
 import { parseInterval } from './schedule.ts';
@@ -188,7 +189,7 @@ export async function runDueCheck(trigger: Trigger, deps: CheckLoopDeps, now: ()
   const evaluator = fresh.evaluator ?? { type: 'ready' as const };
   let step = afterRun({ source: fresh.source, evaluator, state, run, now: at, limits });
   if (step.needDecision) {
-    const outcome = await judge(fresh, step.needDecision.data);
+    const outcome = await judgeCheckData(fresh, step.needDecision.data, config);
     step = afterDecision({ source: fresh.source, state: step.state, hash: step.needDecision.hash, data: step.needDecision.data, outcome, now: at, limits });
   }
 
@@ -199,6 +200,7 @@ export async function runDueCheck(trigger: Trigger, deps: CheckLoopDeps, now: ()
     ms: run.ms,
     ok: run.ok,
     ...(run.ok ? { ready: run.answer.ready, final: run.answer.final } : { error: run.error.slice(0, 300), errorClass: run.errorClass }),
+    ...(step.state.last?.decision && step.state.last.at === at.toISOString() ? { decision: step.state.last.decision.value } : {}),
     ...(step.wake ? { wake: step.wake.reason } : {}),
     ...(step.complete ? { complete: step.complete } : {}),
     ...(step.pause ? { pause: step.pause.kind } : {}),
@@ -228,7 +230,13 @@ export async function runDueCheck(trigger: Trigger, deps: CheckLoopDeps, now: ()
   if (step.wake) {
     const outcome = await deps.fire(fresh, { reason: step.wake.reason, state: next, data: step.wake.data });
     if (outcome === 'skipped') {
-      // Not started: as if this check never saw the change, try again soon.
+      // Not started: as if this check never saw the change, try again
+      // soon — or when the trigger's cooldown between wakes is over, so
+      // a waiting wake does not rerun the script (and the decision
+      // model) every 30 s.
+      const cooldownLeft = fresh.policy?.cooldownMs && fresh.lastSuccessAt
+        ? fresh.policy.cooldownMs - (at.getTime() - new Date(fresh.lastSuccessAt).getTime())
+        : 0;
       await saveCheckState({
         ...next,
         lastReady: state.lastReady,
@@ -236,7 +244,7 @@ export async function runDueCheck(trigger: Trigger, deps: CheckLoopDeps, now: ()
         baselineTaken: state.baselineTaken,
         wakeCount: state.wakeCount,
         ...(state.wakesToday ? { wakesToday: state.wakesToday } : {}),
-        nextCheckAt: new Date(at.getTime() + WAKE_RETRY_MS).toISOString(),
+        nextCheckAt: new Date(at.getTime() + Math.max(WAKE_RETRY_MS, cooldownLeft + 1000)).toISOString(),
       });
       return;
     }
@@ -247,10 +255,4 @@ export async function runDueCheck(trigger: Trigger, deps: CheckLoopDeps, now: ()
     const latest = getTrigger(fresh.id) ?? fresh;
     if (latest.status === 'active') await saveTrigger({ ...latest, status: 'completed', statusReason: step.complete });
   }
-}
-
-/** Art 2 — the decision model reads the data. Comes with stage 3 of
- *  the build; until then an Art 2 trigger cannot be created. */
-async function judge(_trigger: Trigger, _data: unknown): Promise<{ ok: false; error: string }> {
-  return { ok: false, error: 'not available yet' };
 }

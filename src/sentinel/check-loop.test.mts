@@ -37,7 +37,7 @@ async function make(body: string, spec: { mode: 'once' | 'watch'; interval?: str
   const id = `chk-${seq++}`;
   const path = join(work, `${id}.sh`);
   writeFileSync(path, body);
-  const p = await prepareCheckSource(id, { description: 'the thing is up', scriptPath: path, mode: spec.mode, interval: spec.interval ?? (spec.mode === 'once' ? '15s' : '1m'), ...(spec.deadline ? { deadline: spec.deadline } : {}), ...(spec.notifyOnFirst ? { notifyOnFirst: true } : {}) }, limits, t0);
+  const p = await prepareCheckSource(id, { description: 'the thing is up', scriptPath: path, mode: spec.mode, interval: spec.interval ?? (spec.mode === 'once' ? '15s' : '1m'), ...(spec.deadline ? { deadline: spec.deadline } : {}), ...(spec.notifyOnFirst ? { notifyOnFirst: true } : {}) }, config, t0);
   assert.equal(p.ok, true, JSON.stringify(p));
   if (!p.ok) throw new Error('unreachable');
   const trigger: Trigger = {
@@ -234,7 +234,7 @@ test('creating: scripts that restart somora or trip the exec blacklist are refus
   assert.equal(refusedScript('curl -s http://x/health | jq .ok', 'sh'), null);
   const path = join(work, 'bad.sh');
   writeFileSync(path, 'echo hi\nsomora restart\n');
-  const r = await prepareCheckSource('bad-1', { description: 'x', scriptPath: path, mode: 'watch', interval: '1m' }, limits);
+  const r = await prepareCheckSource('bad-1', { description: 'x', scriptPath: path, mode: 'watch', interval: '1m' }, config);
   assert.equal(r.ok, false);
   assert.equal(existsSync(checkScriptDir('bad-1')), false, 'nothing left behind');
 });

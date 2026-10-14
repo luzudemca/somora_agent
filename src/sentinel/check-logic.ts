@@ -59,6 +59,16 @@ export function dataHash(data: unknown): string {
   return createHash('sha256').update(stableJson(data)).digest('hex').slice(0, 32);
 }
 
+/** Nothing to judge: no data, an empty list, object or text. A script
+ *  that prints only new items prints this most of the time. */
+export function isEmptyData(v: unknown): boolean {
+  if (v === null || v === undefined) return true;
+  if (typeof v === 'string') return v.trim() === '';
+  if (Array.isArray(v)) return v.length === 0;
+  if (typeof v === 'object') return Object.keys(v as object).length === 0;
+  return false;
+}
+
 export function initialCheckState(triggerId: string, now: Date): CheckState {
   return { triggerId, startedAt: now.toISOString(), checkCount: 0, wakeCount: 0, errorStreak: 0, baselineTaken: false };
 }
@@ -134,7 +144,9 @@ export function afterRun(args: {
       if (!source.notifyOnFirst) return { state };
       return { state, needDecision: { data: a.data, hash } };
     }
-    if (state.lastDataHash === hash) {
+    if (state.lastDataHash === hash || isEmptyData(a.data)) {
+      // Seen, or nothing at all: the decision model is not asked.
+      state = { ...state, lastDataHash: hash };
       if (pastDeadline) return withWake({ state, wake: { reason: 'deadline', data: a.data }, complete: 'deadline passed' }, now, limits);
       return { state };
     }
@@ -166,7 +178,7 @@ export function afterDecision(args: {
   state: CheckState;
   hash: string;
   data: unknown;
-  outcome: { ok: true; wake: boolean; question: string; value: number | string; detail?: string } | { ok: false; error: string };
+  outcome: { ok: true; wake: boolean; question: string; value: number | string; detail?: string } | { ok: false; error: string; permanent?: boolean };
   now: Date;
   limits: CheckLimits;
 }): CheckStep {
@@ -177,14 +189,15 @@ export function afterDecision(args: {
     // and the data stays unseen, so it is judged again next time.
     last.ok = false;
     last.error = `decision model: ${outcome.error}`;
-    last.errorClass = 'temporary';
+    last.errorClass = outcome.permanent ? 'permanent' : 'temporary';
     const streak = args.state.errorStreak + 1;
     const state: CheckState = { ...args.state, errorStreak: streak, last };
+    if (outcome.permanent) return { state, pause: { kind: 'error', reason: last.error } };
     if (streak >= limits.errorStreak) return { state, pause: { kind: 'error', reason: `${streak} check errors in a row. Last: ${last.error}` } };
     return { state };
   }
   last.decision = { question: outcome.question, value: outcome.value, ...(outcome.detail ? { detail: outcome.detail } : {}) };
-  const state: CheckState = { ...args.state, lastDataHash: hash, errorStreak: 0, last };
+  const state: CheckState = { ...args.state, lastDataHash: hash, errorStreak: 0, last, lastDecision: { at: now.toISOString(), ...last.decision } };
   const pastDeadline = source.mode === 'once' && source.deadline !== undefined && now.getTime() >= new Date(source.deadline).getTime();
   if (outcome.wake) {
     return withWake({ state, wake: { reason: 'decision', data }, ...(source.mode === 'once' ? { complete: 'condition met' } : {}) }, now, limits);

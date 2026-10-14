@@ -301,6 +301,9 @@ export interface CheckState {
   last?: CheckResult;
   /** Wakes per UTC day, for config sentinel.checks.maxWakesPerDay. */
   wakesToday?: { day: string; count: number };
+  /** Art 2: the decision model's last answer — kept when later checks
+   *  bring no new data and so ask nobody. */
+  lastDecision?: { at: string; question: string; value: number | string; detail?: string };
   /** Set when the check paused the trigger (errors or the wake cap);
    *  cleared on the first check after a resume, which also closes the
    *  inbox notice. */

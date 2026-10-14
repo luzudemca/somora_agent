@@ -5,10 +5,11 @@
 import { stat, readFile } from 'node:fs/promises';
 import type { Config } from '../config/types.ts';
 import { checkBlacklist } from '../tools/exec/blacklist.ts';
+import { validateDecisionEvaluator } from './check-judge.ts';
 import { initialCheckState } from './check-logic.ts';
 import { installCheckScript, langOf, removeCheckFiles, saveCheckState } from './check-store.ts';
 import { parseInterval } from './schedule.ts';
-import type { CheckSource } from './types.ts';
+import type { CheckSource, DecisionWakeRule, Evaluator } from './types.ts';
 
 /** A check script is a small program; anything bigger is a mistake. */
 export const MAX_SCRIPT_BYTES = 256 * 1024;
@@ -24,6 +25,9 @@ export interface CheckSpecInput {
   deadline?: string;
   timeoutMs?: number;
   notifyOnFirst?: boolean;
+  /** Art 2: the decision model judges `data` with these questions; the
+   *  wake rule decides. Left out: Art 1, the script says `ready`. */
+  decision?: { questions: unknown; wake: unknown };
 }
 
 type Limits = Config['sentinel']['checks'];
@@ -95,11 +99,18 @@ export function validateCheckSpec(input: CheckSpecInput, limits: Limits, now: Da
 export async function prepareCheckSource(
   id: string,
   input: CheckSpecInput,
-  limits: Limits,
+  config: Config,
   now: Date = new Date(),
-): Promise<{ ok: true; source: CheckSource } | { ok: false; error: string }> {
+): Promise<{ ok: true; source: CheckSource; evaluator: Evaluator } | { ok: false; error: string }> {
+  const limits = config.sentinel.checks;
   const v = validateCheckSpec(input, limits, now);
   if (!v.ok) return v;
+  let evaluator: Evaluator = { type: 'ready' };
+  if (input.decision) {
+    const bad = validateDecisionEvaluator(input.decision.questions, input.decision.wake, config);
+    if (bad) return { ok: false, error: bad };
+    evaluator = { type: 'decision', questions: input.decision.questions as Record<string, unknown>, wake: input.decision.wake as DecisionWakeRule };
+  }
   let size: number;
   try {
     const st = await stat(input.scriptPath);
@@ -127,7 +138,7 @@ export async function prepareCheckSource(
       ...(input.notifyOnFirst ? { notifyOnFirst: true } : {}),
     };
     await saveCheckState({ ...initialCheckState(id, now), nextCheckAt: now.toISOString() });
-    return { ok: true, source };
+    return { ok: true, source, evaluator };
   } catch (err) {
     await removeCheckFiles(id).catch(() => {});
     return { ok: false, error: `could not copy the script: ${(err as Error).message}` };

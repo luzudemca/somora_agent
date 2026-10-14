@@ -136,12 +136,23 @@ test('Art 2 watch: baseline stores the hash, same data asks nobody, new data goe
   assert.equal(c.state.lastDataHash, a.state.lastDataHash, 'hash only moves once the model judged it');
 });
 
+test('Art 2: empty data (nothing new) never asks the decision model', () => {
+  const s = { ...fresh(), baselineTaken: true, lastDataHash: dataHash([{ id: 1 }]) };
+  for (const data of [[], {}, '', null]) {
+    const r = run(watch, s, ok({ data }), t0, decision);
+    assert.equal(r.needDecision, undefined, JSON.stringify(data));
+    assert.equal(r.wake, undefined);
+  }
+});
+
 test('Art 2: model says wake → wake; says no → hash stored, no wake; fails → error, data judged again', () => {
   const s = { ...fresh(), baselineTaken: true, lastDataHash: 'old' };
   const yes = afterDecision({ source: watch, state: s, hash: 'new', data: [1], outcome: { ok: true, wake: true, question: 'q', value: 0.93 }, now: t0, limits });
   assert.equal(yes.wake?.reason, 'decision');
   assert.equal(yes.state.lastDataHash, 'new');
   assert.equal(yes.state.last?.decision?.value, 0.93);
+  assert.equal(yes.state.lastDecision?.value, 0.93);
+  assert.equal(yes.state.lastDecision?.at, t0.toISOString());
   const no = afterDecision({ source: watch, state: s, hash: 'new', data: [1], outcome: { ok: true, wake: false, question: 'q', value: 0.1 }, now: t0, limits });
   assert.equal(no.wake, undefined);
   assert.equal(no.state.lastDataHash, 'new');
