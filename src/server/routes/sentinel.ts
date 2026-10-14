@@ -7,6 +7,7 @@ import * as sentinelSchedule from '../../sentinel/schedule.ts';
 import * as sentinelScheduler from '../../sentinel/scheduler.ts';
 import * as sentinelStore from '../../sentinel/store.ts';
 import { dryRunCheck } from '../../sentinel/check-dry-run.ts';
+import { checkView, checkScriptView } from '../../sentinel/check-view.ts';
 import { config } from '../server-state.ts';
 
 export function registerSentinelRoutes(app: Hono): void {
@@ -25,14 +26,25 @@ export function registerSentinelRoutes(app: Hono): void {
     if (owner) triggers = triggers.filter((t) => t.ownerAgent === owner);
     if (status) triggers = triggers.filter((t) => t.status === status);
     triggers.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    return c.json({ count: triggers.length, triggers });
+    // A check trigger carries its counts and last check (check state).
+    const withChecks = await Promise.all(triggers.map(async (t) => (t.source.type === 'check' ? { ...t, check: await checkView(t, config) } : t)));
+    return c.json({ count: triggers.length, triggers: withChecks });
+  });
+
+  // The script a check trigger runs — read only (KONZEPT §9: no editing in the window).
+  app.get('/sentinel/triggers/:id/script', async (c) => {
+    await sentinelStore.loadTriggers();
+    const t = sentinelStore.getTrigger(c.req.param('id'));
+    if (!t) return c.json({ error: `trigger '${c.req.param('id')}' not found` }, 404);
+    if (t.source.type !== 'check') return c.json({ error: 'not a check trigger' }, 400);
+    return c.json(await checkScriptView(t));
   });
 
   app.get('/sentinel/triggers/:id', async (c) => {
     await sentinelStore.loadTriggers();
     const t = sentinelStore.getTrigger(c.req.param('id'));
     if (!t) return c.json({ error: `trigger '${c.req.param('id')}' not found` }, 404);
-    return c.json({ trigger: t });
+    return c.json({ trigger: t.source.type === 'check' ? { ...t, check: await checkView(t, config) } : t });
   });
 
   app.get('/sentinel/triggers/:id/history', async (c) => {

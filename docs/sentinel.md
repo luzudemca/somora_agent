@@ -470,6 +470,19 @@ The **sentinel** tile opens a window with two parts:
   fires. Three buttons: **test now**, **pause** or **resume**, and
   **delete**.
 
+A check trigger shows more:
+
+- In the list: checks and wakes counted apart, the next check and the
+  last result.
+- In the detail: its kind (check script, or check script and decision
+  model), the check settings, the last check with its data, the
+  questions and wake rule with the last answer, and the script itself,
+  read only. A script that was changed outside somora is flagged.
+- **dry run** replaces **test now**: it runs the script once and shows
+  the answer in the window. Nothing is saved, nobody is woken.
+- An interval below the current limit in `config.yaml` is shown with
+  the interval it really runs with.
+
 ## Limits
 
 Agents create triggers without asking for confirmation, but they cannot
@@ -618,6 +631,7 @@ limits in the Limits table are fixed.
 | `POST /sentinel/triggers/:id/pause` | Pause. |
 | `POST /sentinel/triggers/:id/resume` | Resume. |
 | `POST /sentinel/triggers/:id/test` | Fire now. For a check trigger: a dry run of its script. |
+| `GET /sentinel/triggers/:id/script` | A check trigger's script, read only. |
 | `DELETE /sentinel/triggers/:id` | Delete trigger and history. |
 | `GET /sentinel/status` | `{ started, nextFireAt }` of the scheduler. |
 | `POST /agents/:agent/tools/sentinel` | Any tool action, including `create`. |

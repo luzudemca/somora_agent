@@ -2999,8 +2999,26 @@ and an evaluator of `ready`, or `decision` for a judged check:
   "evaluator": { "type": "ready" } }
 ```
 
-A check trigger has no `nextFireAt`; its counts and next check are in
-the check state, which the `sentinel` tool's `get` returns.
+A check trigger has no `nextFireAt`. Instead the list and the single
+trigger carry `check`, read from its check state:
+
+```json
+"check": { "checks": 412, "wakes": 3, "errorsInARow": 0,
+           "nextCheckAt": "2026-05-17T12:14:30.000Z",
+           "last": { "at": "2026-05-17T12:14:15.000Z", "ms": 104, "ok": true,
+                     "ready": false, "summary": "profile is qwen, switching" },
+           "lastDecision": { "at": "…", "question": "urgent", "value": 0.07,
+                             "detail": "probability of yes, wakes from 0.8" } }
+```
+
+| Field | Meaning |
+|---|---|
+| `checks`, `wakes` | Counted apart: most checks wake nobody. |
+| `errorsInARow` | Check errors since the last good check. |
+| `nextCheckAt` | Only while the trigger is active. |
+| `last` | The last check: `ok`, then `ready`, `summary`, `dataPreview`, `final`, `decision`, or `error` and `errorClass`. |
+| `lastDecision` | A judged check's last answer, kept when later checks bring no new data. |
+| `effectiveInterval` | Set when `config.yaml` raised the interval limit above the trigger's own interval. |
 
 ### `GET /sentinel/triggers/:id`
 
@@ -3033,6 +3051,18 @@ A check trigger that stops records an `error` entry starting with
 `catchUp: true` marks a fire made up for after a restart, `testMode:
 true` one started through the test route. `404` once the trigger is
 deleted.
+
+### `GET /sentinel/triggers/:id/script`
+
+A check trigger's script copy, read only.
+
+```json
+{ "file": "check.py", "lang": "python", "sha256": "…", "text": "#!/usr/bin/env python3\n…", "matches": true }
+```
+
+`matches: false` means the copy was changed outside somora; the
+trigger stops at its next check. A missing copy answers without `text`
+and with `error`. `400` for a time trigger, `404` for an unknown id.
 
 ### `POST /sentinel/triggers/:id/pause`
 

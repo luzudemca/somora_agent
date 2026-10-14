@@ -1227,12 +1227,18 @@ export const api = {
     });
     if (!res.ok) throw new Error(`sentinel delete ${res.status}`);
   },
-  sentinelTest: async (id: string): Promise<void> => {
+  /** A time trigger fires now; a check trigger answers with a dry run of its script. */
+  sentinelTest: async (id: string): Promise<{ ok: boolean; hint?: string; dryRun?: SentinelDryRun }> => {
     const res = await fetch(`/sentinel/triggers/${encodeURIComponent(id)}/test`, {
       method: 'POST',
     });
     if (!res.ok) throw new Error(`sentinel test ${res.status}`);
+    return res.json();
   },
+  sentinelScript: (id: string) =>
+    getJson<{ file: string; lang: string; sha256: string; text?: string; matches: boolean; error?: string }>(
+      `/sentinel/triggers/${encodeURIComponent(id)}/script`,
+    ),
 
   // ─── Image generation ──────────────────────────────────────────────
   imagesStatus: () => getJson<ImagesStatus>('/images/status'),
@@ -1517,16 +1523,32 @@ export interface SentinelTrigger {
   name: string;
   intent?: string;
   ownerAgent: string;
-  source: {
-    type: 'time';
-    spec:
-      | { type: 'at'; iso: string }
-      | { type: 'every'; interval: string }
-      | { type: 'daily'; time: string }
-      | { type: 'weekly'; day: string; time: string }
-      | { type: 'cron'; expression: string };
-  };
-  evaluator: { type: 'none' };
+  source:
+    | {
+        type: 'time';
+        spec:
+          | { type: 'at'; iso: string }
+          | { type: 'every'; interval: string }
+          | { type: 'daily'; time: string }
+          | { type: 'weekly'; day: string; time: string }
+          | { type: 'cron'; expression: string };
+      }
+    | {
+        type: 'check';
+        description: string;
+        interval: string;
+        mode: 'once' | 'watch';
+        deadline?: string;
+        script: { file: string; lang: 'sh' | 'python' | 'node'; sha256: string };
+        timeoutMs?: number;
+        notifyOnFirst?: boolean;
+      };
+  evaluator:
+    | { type: 'none' }
+    | { type: 'ready' }
+    | { type: 'decision'; questions: Record<string, unknown>; wake: SentinelWakeRule };
+  /** Check triggers only: counts, last check, next check. */
+  check?: SentinelCheckView | null;
   dispatch: { agent: string; session: string; prompt: string };
   policy?: { cooldownMs?: number; maxFiresPerDay?: number };
   createdAt: string;
@@ -1538,6 +1560,46 @@ export interface SentinelTrigger {
   lastErrorAt?: string;
   errorStreak: number;
   nextFireAt?: string;
+}
+
+export type SentinelWakeRule =
+  | { question: string; minProbability: number }
+  | { question: string; choice: string; minConfidence?: number }
+  | { question: string; minScore: number };
+
+export interface SentinelCheckResult {
+  at: string;
+  ms: number;
+  ok: boolean;
+  ready?: boolean;
+  summary?: string;
+  dataPreview?: string;
+  final?: 'failed';
+  decision?: { question: string; value: number | string; detail?: string };
+  error?: string;
+  errorClass?: 'temporary' | 'permanent';
+}
+
+export interface SentinelCheckView {
+  checks: number;
+  wakes: number;
+  errorsInARow: number;
+  nextCheckAt?: string;
+  last?: SentinelCheckResult;
+  lastDecision?: { at: string; question: string; value: number | string; detail?: string };
+  effectiveInterval?: string;
+}
+
+export interface SentinelDryRun {
+  ok: boolean;
+  art: 1 | 2;
+  ms: number;
+  answer?: { ready?: boolean; summary?: string; data?: unknown; final?: 'failed' };
+  error?: string;
+  errorClass?: 'temporary' | 'permanent';
+  stderr?: string;
+  decision?: { ok: true; wake: boolean; question: string; value: number | string; detail?: string } | { ok: false; error: string };
+  verdict: string;
 }
 
 export interface SentinelFireEntry {

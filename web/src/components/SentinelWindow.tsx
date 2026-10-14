@@ -1,8 +1,12 @@
 // Sentinel tab — admin/inspector for the proactive trigger runtime.
 // Two views:
 //   1. List: name / schedule / owner / next-fire / fire-count / status
+//      (a check trigger: checks and wakes counted apart, next check,
+//      last result)
 //   2. Detail: full config + history + action buttons (test / pause /
-//      resume / delete)
+//      resume / delete). A check trigger also shows its check, the last
+//      check, the decision model's questions and rule, and its script —
+//      read only; its test is a dry run shown in place.
 //
 // This is NOT a notification channel — agents do their work in their
 // own chat sessions, that's where you read the results. Sentinel-tab
@@ -21,7 +25,13 @@ import {
   Trash2,
   Zap,
 } from 'lucide-react';
-import { api, type SentinelTrigger, type SentinelFireEntry } from '../lib/api';
+import {
+  api,
+  type SentinelTrigger,
+  type SentinelFireEntry,
+  type SentinelDryRun,
+  type SentinelWakeRule,
+} from '../lib/api';
 
 const POLL_INTERVAL_MS = 5_000;
 
@@ -30,6 +40,7 @@ export function SentinelWindow() {
   const [selected, setSelected] = useState<string | null>(null);
   const [history, setHistory] = useState<SentinelFireEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dryRun, setDryRun] = useState<{ id: string; running: boolean; result?: SentinelDryRun; error?: string } | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -59,6 +70,7 @@ export function SentinelWindow() {
   useEffect(() => {
     if (selected) void refreshHistory(selected);
     else setHistory(null);
+    setDryRun(null);
   }, [selected, refreshHistory]);
 
   const selectedTrigger = useMemo(
@@ -76,6 +88,18 @@ export function SentinelWindow() {
           await api.sentinelDelete(id);
           if (selected === id) setSelected(null);
         } else if (action === 'test') {
+          const isCheck = triggers?.find((t) => t.id === id)?.source.type === 'check';
+          if (isCheck) {
+            // A check trigger's test is a dry run: show its answer here.
+            setDryRun({ id, running: true });
+            try {
+              const r = await api.sentinelTest(id);
+              setDryRun({ id, running: false, ...(r.dryRun ? { result: r.dryRun } : {}) });
+            } catch (err) {
+              setDryRun({ id, running: false, error: (err as Error).message });
+            }
+            return;
+          }
           await api.sentinelTest(id);
           // Re-fetch history shortly after the test fire dispatches.
           setTimeout(() => {
@@ -88,7 +112,7 @@ export function SentinelWindow() {
         alert(`${action} failed: ${(err as Error).message}`);
       }
     },
-    [refresh, refreshHistory, selected],
+    [refresh, refreshHistory, selected, triggers],
   );
 
   return (
@@ -179,8 +203,11 @@ export function SentinelWindow() {
       {selectedTrigger && (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <DetailPanel
+            // A new trigger starts at the top, not at the last one's scroll position.
+            key={selectedTrigger.id}
             trigger={selectedTrigger}
             history={history}
+            dryRun={dryRun?.id === selectedTrigger.id ? dryRun : null}
             onAction={(act) => void handleAction(act, selectedTrigger.id)}
             onClose={() => setSelected(null)}
           />
@@ -218,10 +245,15 @@ function TriggerRow({
         <StatusIcon status={trigger.status} />
         <span style={{ color: 'var(--text-1)', fontWeight: 600 }}>{trigger.name}</span>
         <span style={{ marginLeft: 'auto', color: 'var(--text-3)', fontSize: 10 }}>
-          {trigger.fireCount}× fired
+          {trigger.check
+            ? `${trigger.check.checks} checks · ${trigger.check.wakes} wake${trigger.check.wakes === 1 ? '' : 's'}`
+            : `${trigger.fireCount}× fired`}
         </span>
       </div>
       <div style={{ color: 'var(--text-2)', fontSize: 10 }}>{describeSource(trigger)}</div>
+      {trigger.source.type === 'check' && (
+        <div style={{ color: 'var(--text-2)', fontSize: 10 }}>{trigger.source.description}</div>
+      )}
       <div style={{ color: 'var(--text-3)', fontSize: 10 }}>
         owner: <strong style={{ color: 'var(--text-2)' }}>{trigger.ownerAgent}</strong>
         {trigger.ownerAgent !== trigger.dispatch.agent && (
@@ -235,6 +267,17 @@ function TriggerRow({
       {trigger.nextFireAt && (
         <div style={{ color: 'var(--text-3)', fontSize: 10 }}>
           next: {formatAbsolute(trigger.nextFireAt)} ({formatRelativeFuture(trigger.nextFireAt)})
+        </div>
+      )}
+      {trigger.check?.nextCheckAt && (
+        <div style={{ color: 'var(--text-3)', fontSize: 10 }}>
+          next check: {formatTime(trigger.check.nextCheckAt)} ({formatRelativeFuture(trigger.check.nextCheckAt, 'due now')})
+        </div>
+      )}
+      {/* A stopped trigger's reason below already names the last error. */}
+      {trigger.check?.last && !(trigger.statusReason && !trigger.check.last.ok) && (
+        <div style={{ color: trigger.check.last.ok ? 'var(--text-3)' : 'var(--danger)', fontSize: 10 }}>
+          last check {formatTime(trigger.check.last.at)}: {lastCheckText(trigger.check.last)}
         </div>
       )}
       {trigger.statusReason && (
@@ -260,7 +303,13 @@ function StatusIcon({ status }: { status: SentinelTrigger['status'] }) {
 }
 
 function describeSource(t: SentinelTrigger): string {
-  if (t.source.type !== 'time') return t.source.type;
+  if (t.source.type === 'check') {
+    const c = t.source;
+    const judged = t.evaluator.type === 'decision' ? ' · judged' : '';
+    return c.mode === 'once'
+      ? `Check once · every ${c.interval}${c.deadline ? ` · until ${formatAbsolute(c.deadline)}` : ''}${judged}`
+      : `Check watch · every ${c.interval}${judged}`;
+  }
   const s = t.source.spec;
   switch (s.type) {
     case 'at':
@@ -276,17 +325,41 @@ function describeSource(t: SentinelTrigger): string {
   }
 }
 
+/** One line for a check result: the summary, ready or the error. */
+function lastCheckText(r: NonNullable<NonNullable<SentinelTrigger['check']>['last']>): string {
+  if (!r.ok) return r.error ?? 'error';
+  const parts: string[] = [];
+  if (r.final) parts.push('final: failed');
+  else if (r.ready !== undefined) parts.push(r.ready ? 'ready' : 'not ready');
+  if (r.decision) parts.push(`${r.decision.question} ${r.decision.value}`);
+  if (r.summary) parts.push(r.summary);
+  return parts.join(' · ') || 'ok';
+}
+
+function describeWakeRule(w: SentinelWakeRule): string {
+  if ('minProbability' in w) return `wake when "${w.question}" is yes with probability ≥ ${w.minProbability}`;
+  if ('choice' in w) {
+    return w.minConfidence !== undefined
+      ? `wake when "${w.question}" = ${w.choice} with probability ≥ ${w.minConfidence}`
+      : `wake when "${w.question}" picks ${w.choice}`;
+  }
+  return `wake when "${w.question}" scores ≥ ${w.minScore}`;
+}
+
 function DetailPanel({
   trigger,
   history,
+  dryRun,
   onAction,
   onClose,
 }: {
   trigger: SentinelTrigger;
   history: SentinelFireEntry[] | null;
+  dryRun: { running: boolean; result?: SentinelDryRun; error?: string } | null;
   onAction: (action: 'pause' | 'resume' | 'delete' | 'test') => void;
   onClose: () => void;
 }) {
+  const isCheck = trigger.source.type === 'check';
   return (
     <>
       <div
@@ -319,7 +392,12 @@ function DetailPanel({
         </button>
       </div>
       <div style={{ padding: 12, flex: 1, overflowY: 'auto' }}>
-        <Section title="Schedule">{describeSource(trigger)}</Section>
+        {dryRun && <DryRunResult run={dryRun} />}
+        {isCheck ? (
+          <CheckSections trigger={trigger} />
+        ) : (
+          <Section title="Schedule">{describeSource(trigger)}</Section>
+        )}
         {trigger.intent && (
           <Section title="Intent">{trigger.intent}</Section>
         )}
@@ -360,6 +438,15 @@ function DetailPanel({
           </Section>
         )}
         <Section title="Stats">
+          {trigger.check && (
+            <>
+              checks: {trigger.check.checks} · wakes: {trigger.check.wakes}
+              {trigger.check.errorsInARow > 0 && (
+                <span style={{ color: 'var(--danger)' }}> · errors in a row: {trigger.check.errorsInARow}</span>
+              )}
+              <br />
+            </>
+          )}
           fires: {trigger.fireCount}
           {trigger.lastSuccessAt && (
             <>
@@ -404,9 +491,11 @@ function DetailPanel({
       >
         <ActionButton
           icon={<Zap size={12} />}
-          label="test now"
+          label={isCheck ? (dryRun?.running ? 'running…' : 'dry run') : 'test now'}
           color="var(--accent)"
-          onClick={() => onAction('test')}
+          onClick={() => {
+            if (!dryRun?.running) onAction('test');
+          }}
         />
         {trigger.status === 'paused' || trigger.status === 'error' ? (
           <ActionButton
@@ -431,6 +520,176 @@ function DetailPanel({
         />
       </div>
     </>
+  );
+}
+
+const boxStyle: React.CSSProperties = {
+  marginTop: 4,
+  padding: 8,
+  background: 'var(--bg-3)',
+  border: '1px solid var(--line-2)',
+  borderRadius: 4,
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-word',
+  color: 'var(--text-2)',
+  fontSize: 10,
+  maxHeight: 160,
+  overflowY: 'auto',
+};
+
+function CheckSections({ trigger }: { trigger: SentinelTrigger }) {
+  if (trigger.source.type !== 'check') return null;
+  const c = trigger.source;
+  const view = trigger.check;
+  const judged = trigger.evaluator.type === 'decision' ? trigger.evaluator : null;
+  return (
+    <>
+      <Section title="Kind">{judged ? 'Check script + decision model' : 'Check script'}</Section>
+      <Section title="Check">
+        {c.description}
+        <br />
+        mode: {c.mode === 'once' ? 'once (wakes on the first positive check, then done)' : 'watch (wakes on each change)'}
+        <br />
+        every: {c.interval}
+        {view?.effectiveInterval && (
+          <span style={{ color: 'var(--warn)' }}>
+            {' '}· runs every {view.effectiveInterval} (config minimum)
+          </span>
+        )}
+        {c.deadline && (
+          <>
+            <br />
+            deadline: {formatAbsolute(c.deadline)}
+          </>
+        )}
+        {c.timeoutMs !== undefined && (
+          <>
+            <br />
+            time limit: {Math.round(c.timeoutMs / 1000)}s
+          </>
+        )}
+        {c.notifyOnFirst && (
+          <>
+            <br />
+            the first check may wake
+          </>
+        )}
+        {view?.nextCheckAt && (
+          <>
+            <br />
+            next check: {formatTime(view.nextCheckAt)} ({formatRelativeFuture(view.nextCheckAt, 'due now')})
+          </>
+        )}
+      </Section>
+      {view?.last && (
+        <Section title="Last check">
+          <span style={{ color: view.last.ok ? 'var(--text-1)' : 'var(--danger)' }}>
+            {formatTime(view.last.at)} · {view.last.ms} ms · {lastCheckText(view.last)}
+          </span>
+          {view.last.dataPreview && <div style={boxStyle}>{view.last.dataPreview}</div>}
+        </Section>
+      )}
+      {judged && (
+        <Section title="Decision model">
+          {describeWakeRule(judged.wake)}
+          {view?.lastDecision && (
+            <>
+              <br />
+              last answer: {String(view.lastDecision.value)}
+              {view.lastDecision.detail ? ` (${view.lastDecision.detail})` : ''} · {formatTime(view.lastDecision.at)}
+            </>
+          )}
+          <div style={boxStyle}>{JSON.stringify(judged.questions, null, 2)}</div>
+        </Section>
+      )}
+      <ScriptSection id={trigger.id} lang={c.script.lang} />
+    </>
+  );
+}
+
+/** The script a check runs, read only. Loaded when opened. */
+function ScriptSection({ id, lang }: { id: string; lang: string }) {
+  const [open, setOpen] = useState(false);
+  const [script, setScript] = useState<{ text?: string; matches: boolean; error?: string; sha256: string } | null>(null);
+  useEffect(() => {
+    setScript(null);
+    setOpen(false);
+  }, [id]);
+  useEffect(() => {
+    if (!open || script) return;
+    api
+      .sentinelScript(id)
+      .then(setScript)
+      .catch((err: Error) => setScript({ matches: false, error: err.message, sha256: '' }));
+  }, [open, script, id]);
+  return (
+    <Section title="Script">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        style={{ all: 'unset', cursor: 'pointer', color: 'var(--accent)', fontSize: 10 }}
+      >
+        {open ? '▾ hide' : '▸ show'} ({lang}, read only)
+      </button>
+      {open &&
+        (script === null ? (
+          <div style={{ color: 'var(--text-3)', fontSize: 10, marginTop: 4 }}>loading…</div>
+        ) : (
+          <>
+            {script.error && <div style={{ color: 'var(--danger)', fontSize: 10, marginTop: 4 }}>{script.error}</div>}
+            {script.text !== undefined && !script.matches && (
+              <div style={{ color: 'var(--danger)', fontSize: 10, marginTop: 4 }}>
+                changed outside somora — the trigger stops at its next check
+              </div>
+            )}
+            {script.text !== undefined && (
+              <pre style={{ ...boxStyle, maxHeight: 260, fontFamily: 'inherit', margin: '4px 0 0' }}>{script.text}</pre>
+            )}
+            {script.sha256 && (
+              <div style={{ color: 'var(--text-3)', fontSize: 9, marginTop: 2 }}>sha256 {script.sha256.slice(0, 16)}…</div>
+            )}
+          </>
+        ))}
+    </Section>
+  );
+}
+
+function DryRunResult({ run }: { run: { running: boolean; result?: SentinelDryRun; error?: string } }) {
+  const r = run.result;
+  return (
+    <Section title="Dry run">
+      {run.running ? (
+        <span style={{ color: 'var(--text-3)' }}>running the script…</span>
+      ) : run.error ? (
+        <span style={{ color: 'var(--danger)' }}>{run.error}</span>
+      ) : r ? (
+        <div
+          style={{
+            padding: 8,
+            borderRadius: 4,
+            border: `1px solid ${r.ok ? 'var(--accent)' : 'var(--danger)'}`,
+            background: 'var(--bg-3)',
+            fontSize: 10,
+          }}
+        >
+          <div style={{ color: r.ok ? 'var(--accent)' : 'var(--danger)' }}>
+            {r.ok ? 'ran' : 'failed'} · {r.ms} ms
+          </div>
+          {r.error && <div style={{ color: 'var(--danger)', whiteSpace: 'pre-wrap' }}>{r.error}</div>}
+          {r.answer && <div style={boxStyle}>{JSON.stringify(r.answer, null, 2)}</div>}
+          {r.decision && (
+            <div style={{ color: 'var(--text-2)', marginTop: 4 }}>
+              {r.decision.ok
+                ? `${r.decision.question} = ${r.decision.value} → ${r.decision.wake ? 'would wake' : 'would not wake'}`
+                : `decision model: ${r.decision.error}`}
+            </div>
+          )}
+          {r.verdict && <div style={{ color: 'var(--text-2)', marginTop: 4 }}>{r.verdict}</div>}
+          {r.stderr && <div style={{ ...boxStyle, color: 'var(--text-3)' }}>{r.stderr}</div>}
+          <div style={{ color: 'var(--text-3)', marginTop: 4 }}>Nothing was saved, nobody was woken.</div>
+        </div>
+      ) : null}
+    </Section>
   );
 }
 
@@ -459,7 +718,9 @@ function HistoryRow({ entry }: { entry: SentinelFireEntry }) {
       ? 'var(--accent)'
       : entry.outcome === 'error'
         ? 'var(--danger)'
-        : 'var(--text-3)';
+        : entry.outcome === 'updated'
+          ? 'var(--text-2)'
+          : 'var(--text-3)';
   return (
     <div
       style={{
@@ -478,6 +739,7 @@ function HistoryRow({ entry }: { entry: SentinelFireEntry }) {
       {entry.skipReason && (
         <div style={{ color: 'var(--text-3)' }}>{entry.skipReason}</div>
       )}
+      {entry.note && <div style={{ color: 'var(--text-3)' }}>{entry.note}</div>}
       {entry.error && (
         <div style={{ color: 'var(--danger)', whiteSpace: 'pre-wrap' }}>{entry.error}</div>
       )}
@@ -534,10 +796,23 @@ function formatAbsolute(iso: string): string {
   }
 }
 
-function formatRelativeFuture(iso: string): string {
+/** Time of day, with the date only when it is not today. */
+function formatTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const today = new Date().toDateString() === d.toDateString();
+    return today
+      ? d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      : formatAbsolute(iso);
+  } catch {
+    return iso;
+  }
+}
+
+function formatRelativeFuture(iso: string, past = 'past due'): string {
   try {
     const ms = new Date(iso).getTime() - Date.now();
-    if (ms < 0) return 'past due';
+    if (ms < 0) return past;
     if (ms < 60_000) return `in ${Math.round(ms / 1000)}s`;
     if (ms < 3_600_000) return `in ${Math.round(ms / 60_000)}m`;
     if (ms < 86_400_000) return `in ${Math.round(ms / 3_600_000)}h`;
