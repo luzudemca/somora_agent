@@ -51,6 +51,19 @@ check('identical configs → no change', diffConfigSections(base, structuredClon
   check('multiple sections listed sorted', JSON.stringify(changed) === '["attachments","server"]' || changed.includes('attachments'));
   check('restart subset only', restartRequiredFor(changed).every((k) => RESTART_REQUIRED_SECTIONS.includes(k)));
 }
+{
+  // Sentinel's check limits are read before every check: a change there
+  // alone needs no restart; the retention next to them still does.
+  const checks = structuredClone(base);
+  checks.sentinel.checks.maxWakesPerDay = 2;
+  const changed = diffConfigSections(base, checks);
+  check('checks edit → sentinel changed', JSON.stringify(changed) === '["sentinel"]');
+  check('sentinel.checks is hot', restartRequiredFor(changed, base, checks).length === 0);
+  check('without both configs the section counts', JSON.stringify(restartRequiredFor(changed)) === '["sentinel"]');
+  const retention = structuredClone(checks);
+  retention.sentinel.completedRetentionDays = 1;
+  check('retention still needs restart', JSON.stringify(restartRequiredFor(diffConfigSections(base, retention), base, retention)) === '["sentinel"]');
+}
 // Every restart-required name must be a real top-level key — a typo here
 // would silently make a section "hot".
 const topLevel = new Set(Object.keys(ConfigSchema.shape));

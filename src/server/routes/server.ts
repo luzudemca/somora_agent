@@ -73,7 +73,7 @@ export function registerServerRoutes(app: Hono, routeDeps: ServerRoutesDeps): vo
       return c.json({ ok: false, error: (err as Error).message }, 400);
     }
     const changed = diffConfigSections(config, next);
-    const restartRequired = restartRequiredFor(changed);
+    const restartRequired = restartRequiredFor(changed, config, next);
     setConfig(next);
     setConfigLoadedAt(new Date().toISOString());
     setConfigMtime(await configFileMtime());

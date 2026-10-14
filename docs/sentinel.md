@@ -619,7 +619,8 @@ sentinel:
 | `sentinel.checks.maxWakesPerDay` | `24` | Wakes per check trigger and UTC day. |
 
 `completedRetentionDays` needs a server restart. The `checks` settings
-apply from the next check. A trigger created under a lower interval
+need only a config reload (`/reload` in the TUI, the gear in the web
+taskbar, or `POST /config/reload`) and apply from the next check. A trigger created under a lower interval
 limit than the current one runs with the current limit. The other
 limits in the Limits table are fixed.
 
