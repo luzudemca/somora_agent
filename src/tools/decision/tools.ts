@@ -116,7 +116,10 @@ function description(model: DecisionModel | null): string {
     'Ask the configured decision model typed questions about state you supply. It returns probabilities, not prose: ' +
     'boolean → probabilityTrue (0–1, a probability, not a verdict); choice → the chosen label with the full distribution and confidence; ' +
     'score → a fractional position from 0 to max on your ordered levels (2.7 of max 3 is near the top level). ' +
-    'Use it to classify, route, triage or check a condition — above all for many similar items, or when you want a number to compare against a threshold. ' +
+    'Use it to classify, route, triage or check a condition. Prefer it to your own judgement when: you sort or check more than a handful of similar items ' +
+    '(mails, messages, feed entries — one call takes many questions); the same check comes back (a recurring task, a watch) and should give comparable ' +
+    'answers each time; or you need a probability to compare against a threshold rather than a yes or no. For a single decision inside the ' +
+    'conversation your own judgement is usually enough. ' +
     'It sees ONLY what you send: no conversation, no files' + (images ? ' except the images you name' : '') + '. ' +
     'Questions are independent and answered in one pass; one that depends on another\'s answer needs a second call. ' +
     'Every question carries its own text (instructions or criteria): the question id is only a label. ' +

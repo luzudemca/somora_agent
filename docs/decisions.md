@@ -38,6 +38,16 @@ Reload the config or restart the server. Every agent then has
 `decision_evaluate`, unless you switch it off for an agent in the
 Abilities window. Without a `decisions.model`, no agent sees the tool.
 
+The tool's description tells agents when it beats their own judgement:
+sorting or checking more than a handful of similar items, a check that
+comes back and should answer the same way each time, or a probability
+to compare against a threshold. For a single decision in a conversation
+they decide themselves.
+
+Agents seldom reach for it unprompted, so name it in a task or in the
+persona of an agent with such a job, for example "sort new mail with
+decision_evaluate".
+
 ## Which models work
 
 somora speaks the System One API: `POST <baseUrl>/v1/systemone`. The
