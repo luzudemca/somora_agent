@@ -240,6 +240,7 @@ import { registerFilesRoutes } from './routes/files.ts';
 import { registerWikiRoutes } from './routes/wiki.ts';
 import { registerTerminalRoutes } from './routes/terminals.ts';
 import { registerAbilitiesRoutes } from './routes/abilities.ts';
+import { registerMcpRoutes } from './routes/mcp.ts';
 
 type Subscriber = (e: SseEvent) => Promise<void>;
 interface StreamSub {
@@ -642,7 +643,7 @@ logger.info({
 // read the catalog snapshot and forward calls to POST /mcp/call.
 // Lazy: warmup() fires the connects in the background, boot never
 // blocks on an external server.
-const mcpHub = new McpHubManager(config.mcp);
+export const mcpHub = new McpHubManager(config.mcp);
 if (mcpHub.enabled) {
   bridgeMcpTools(mcpHub, tools);
   let snapshotTimer: NodeJS.Timeout | null = null;
@@ -900,57 +901,7 @@ app.get('/sentinel/status', (c) => {
   return c.json(sentinelScheduler.schedulerStatus());
 });
 
-// --- External MCP servers (hub) — design private/mcp-hub-design.md §4.5.
-// Loopback-only posture like /tools (DECISION #31): no auth header, the
-// network boundary is the trust boundary.
-
-function mcpDisabled(c: Context) {
-  return c.json(
-    { error: 'no external MCP servers configured — add mcp.servers to ~/.somora/config.yaml' },
-    503,
-  );
-}
-
-app.get('/mcp/status', (c) => {
-  if (!mcpHub.enabled) return mcpDisabled(c);
-  return c.json({ enabled: true, servers: mcpHub.status() });
-});
-
-// Internal dispatch endpoint for the MCP-child proxy mode (and curl
-// debugging). Body: { server, tool (raw upstream name), args, timeoutMs? }.
-app.post('/mcp/call', async (c) => {
-  if (!mcpHub.enabled) return mcpDisabled(c);
-  const body = (await c.req.json().catch(() => null)) as {
-    server?: string;
-    tool?: string;
-    args?: Record<string, unknown>;
-    timeoutMs?: number;
-  } | null;
-  if (!body?.server || !body.tool) {
-    return c.json({ error: 'server and tool are required' }, 400);
-  }
-  try {
-    const result = await mcpHub.callTool(
-      body.server,
-      body.tool,
-      body.args ?? {},
-      typeof body.timeoutMs === 'number' ? body.timeoutMs : undefined,
-    );
-    return c.json(result);
-  } catch (err) {
-    return c.json({ error: (err as Error).message }, 502);
-  }
-});
-
-app.post('/mcp/servers/:name/reconnect', async (c) => {
-  if (!mcpHub.enabled) return mcpDisabled(c);
-  try {
-    const status = await mcpHub.reconnect(c.req.param('name'));
-    return c.json({ ok: true, status });
-  } catch (err) {
-    return c.json({ error: (err as Error).message }, 400);
-  }
-});
+registerMcpRoutes(app, { mcpHub });
 
 registerAbilitiesRoutes(app, { tools });
 
