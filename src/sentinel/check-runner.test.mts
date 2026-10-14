@@ -41,6 +41,7 @@ test('the contract: ready with summary and data; a debug line before the JSON is
 test('errors are errors: missing ready, not JSON, bad final, exit code, nothing printed', async () => {
   for (const [body, re] of [
     ['echo \'{"summary": "x"}\'', /missing "ready"/],
+    ['echo \'{"data": [1]}\'', /judged check: pass decision/],
     ['echo hello', /not JSON/],
     ['echo \'{"ready": true, "final": "done"}\'', /"final" can only be "failed"/],
     ['echo boom >&2; exit 3', /exit code 3: boom/],

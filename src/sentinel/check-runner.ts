@@ -175,7 +175,12 @@ export function parseCheckOutput(stdout: string, art: 1 | 2): { ok: true; answer
     answer.ready = o.ready;
   }
   if (!answer.final) {
-    if (art === 1 && answer.ready === undefined) return { ok: false, error: 'missing "ready": true or false' };
+    if (art === 1 && answer.ready === undefined) {
+      // An agent that dry-runs a judged script without its decision block
+      // gets this — say what is missing instead of only "ready" (live 2026-10-14).
+      const hint = 'data' in o ? ' — the script prints "data", so it is a judged check: pass decision {questions, wake} as well (on update too, the same as the trigger has)' : '';
+      return { ok: false, error: `missing "ready": true or false${hint}` };
+    }
     if (art === 2 && !('data' in o)) return { ok: false, error: 'missing "data": what the decision model should judge' };
   }
   return { ok: true, answer };
