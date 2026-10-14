@@ -14,7 +14,7 @@ import { writeCatalog } from '../mcp/hub/catalog.ts';
 import { McpHubManager } from '../mcp/hub/manager.ts';
 import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { createSecureServer as createHttp2SecureServer } from 'node:http2';
 import { TlsKeeper, type SecureContextHolder } from './tls-keeper.ts';
 import { UpdateChecker } from './update-check.ts';
@@ -7793,3 +7793,14 @@ process.on('unhandledRejection', (reason) => {
 process.on('uncaughtException', (err) => {
   logger.error({ msg: 'process.uncaught_exception', err: err.message, stack: err.stack });
 });
+
+// SOMORA_DUMP_ROUTES=<file>: write every registered route (method, path,
+// in registration order) to that file once the module has run. A test
+// seam for moving routes between files — the list and its order must
+// stay the same. Nothing happens without it.
+if (process.env.SOMORA_DUMP_ROUTES) {
+  writeFileSync(
+    process.env.SOMORA_DUMP_ROUTES,
+    app.routes.map((r) => `${r.method} ${r.path}`).join('\n') + '\n',
+  );
+}
