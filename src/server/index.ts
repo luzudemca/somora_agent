@@ -1,133 +1,67 @@
 import { resolveBrowserSession } from '../browser/session.ts';
 import { readLogSince, readLogTail } from './logs.ts';
-import { watchBrowserSnapshots } from '../browser/change-stream.ts';
-import { serve, upgradeWebSocket } from '@hono/node-server';
+import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { Hono, type Context } from 'hono';
-import { checkBrowserRequest, isThisMachine } from './browser-guard.ts';
-import { config, configLoadedAt, configLoadedMtimeMs, setConfig, setConfigLoadedAt, setConfigMtime } from './server-state.ts';
-import { COOKIE_NAME, KeyStore, MissCounter, presentedKey } from './auth-key.ts';
+import { Hono } from 'hono';
+import { checkBrowserRequest } from './browser-guard.ts';
+import { config, configLoadedMtimeMs, setConfig, setConfigMtime } from './server-state.ts';
+import { KeyStore } from './auth-key.ts';
 import { serializeSessionEvent } from './sse-serializer.ts';
-import { streamSSEH2Safe } from './sse-h2-safe.ts';
-import { destroySocketOf, installTransportLiveness, remoteOf, startSseHeartbeat } from './sse-liveness.ts';
+import { installTransportLiveness } from './sse-liveness.ts';
 import { bridgeMcpTools } from '../mcp/hub/bridge.ts';
 import { writeCatalog } from '../mcp/hub/catalog.ts';
 import { McpHubManager } from '../mcp/hub/manager.ts';
-import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createSecureServer as createHttp2SecureServer } from 'node:http2';
 import { TlsKeeper, type SecureContextHolder } from './tls-keeper.ts';
 import { UpdateChecker } from './update-check.ts';
-import {
-  allowResume, clearRestartIntent, detectedResumeText, readRestartIntent, requestedResumeText, writeRestartIntent,
-} from './restart-intent.ts';
-import { LAUNCHD_LABEL, launchdAvailable, launchdDomain, launchdLoaded } from '../cli/launchd.ts';
-import {
-  homedir,
-  cpus as osCpus,
-  freemem as osFreemem,
-  loadavg as osLoadavg,
-  totalmem as osTotalmem,
-} from 'node:os';
+import { allowResume, clearRestartIntent, detectedResumeText, readRestartIntent, requestedResumeText } from './restart-intent.ts';
+import { homedir } from 'node:os';
 import { resolve as resolvePath } from 'node:path';
 import { WebSocketServer } from 'ws';
-import { resolveThinking, VALID_THINKING_LEVELS } from './thinking-resolve.ts';
 import { applyClaudeCliSdkEnv, applyCodexCliEnv, configPath, currentConfigProblem, getFreshConfig, loadConfig, primeFreshConfig } from '../config/loader.ts';
-import { diffConfigSections, restartRequiredFor, RESTART_REQUIRED_SECTIONS } from '../config/reload.ts';
-import { spawn as spawnChild, spawnSync as spawnSyncChild } from 'node:child_process';
-import { mkdir as mkdirFs, rename as renameFs, stat as statFile, writeFile as writeFileFs } from 'node:fs/promises';
-import { workerChain, type Config, resolveAnyRef, describeModelRefs, type ThinkingLevel, SamplingSchema,
-  listAllModels,
-} from '../config/types.ts';
-import { mergeSampling, SAMPLING_KEYS } from '../engine/sampling.ts';
+import { stat as statFile } from 'node:fs/promises';
+import { workerChain, type Config, resolveAnyRef, describeModelRefs } from '../config/types.ts';
 import { storeAttachment } from '../attachments/store.ts';
-import { generateImage, ImageGenError } from '../imagegen/generate.ts';
-import { referenceFromBase64 } from '../imagegen/references.ts';
-import { startVideoJob, VideoGenError, videoModelCapabilities, videoModelMedia } from '../videogen/generate.ts';
 import { videoRequestFromBody, VideoRequestError } from '../videogen/request.ts';
-import { ensureVideoStill } from '../videogen/frame.ts';
 import { checkSlot as checkVideoSlot, listJobs as listVideoJobs } from '../videogen/jobs.ts';
 import { configureVideoNotifier, startVideoRunner } from '../videogen/runner.ts';
 import { configureVideoWake, wakeForJob } from '../videogen/wake.ts';
-import {
-  clearCatalogCache,
-  listCatalogModels as listImageCatalogModels,
-  resolveCapabilities as resolveImageCapabilities,
-} from '../media/capabilities.ts';
 import {
   deleteRecord as deleteMediaRecord,
   listRecords as listMediaRecords,
   readRecord as readMediaRecord,
   totalBytes as imageTotalBytes,
 } from '../media/records.ts';
-import { detectMimeFromPath } from '../multimodal/mime.ts';
-import { existsSync } from 'node:fs';
-import { readFile as fsReadFile, stat as statFs, readFile as readFileFs } from 'node:fs/promises';
-import { dirname, isAbsolute, join as joinPath, normalize } from 'node:path';
+import { join as joinPath } from 'node:path';
 import { checkReadAllowed, checkWriteAllowed, expandHome, realpathSafeAncestor } from '../tools/file/policy.ts';
-import {
-  buildTree,
-  extractLinkTargets,
-  getPage,
-  getWikiIndex,
-  globalGraph,
-  invalidateWikiIndex,
-  localGraph,
-  readPageContent,
-  resolveLinkTargets,
-} from '../wiki/explorer.ts';
 import { listTmuxSessions } from '../tmux/list.ts';
-import {
-  ensureMemoryDirs,
-  getMemoryManager,
-  shutdownMemoryRegistry,
-  getSharedIndex,
-  sharedIndexStatus,
-} from '../memory/registry.ts';
-import { getEmbedderStatus, warmupEmbedder } from '../memory/embeddings.ts';
+import { ensureMemoryDirs, getMemoryManager, shutdownMemoryRegistry, getSharedIndex } from '../memory/registry.ts';
+import { warmupEmbedder } from '../memory/embeddings.ts';
 import { setupClaudeConfigDir } from './claude-config-dir.ts';
-import { paginateHistory } from './history-page.ts';
-import {
-  configureClaudeCredentialSync,
-  credentialSyncStatus,
-  reconcileClaudeCredentials,
-  startClaudeCredentialSyncWatcher,
-  stopClaudeCredentialSyncWatcher,
-} from './claude-credential-sync.ts';
+import { configureClaudeCredentialSync, reconcileClaudeCredentials, startClaudeCredentialSyncWatcher, stopClaudeCredentialSyncWatcher } from './claude-credential-sync.ts';
 import { getEffectiveEnv } from './env.ts';
 import { loadSomoraEnvFile } from './env-file.ts';
 import { SOMORA_HOME_DIR } from './logger.ts';
-import { shortToolName } from './tool-format.ts';
-import { ensureWorkspaceDirs, effectiveWorkspace } from './workspace.ts';
+import { ensureWorkspaceDirs } from './workspace.ts';
 import {
   ensureDefaultAgent,
   listAgents,
   loadPersona,
   type Persona,
 } from '../persona/loader.ts';
-import {
-  createSession,
-  getHistory,
-  listSessions,
-  archiveSession,
-  unarchiveSession,
-  resetSession,
-  resolveSessionId,
-  sessionMetaStore, SessionSlugTakenError } from '../storage/sessions.ts';
+import { sessionMetaStore } from '../storage/sessions.ts';
 import { configureLongTaskTimeouts } from '../tools/agents/long-task-timeouts.ts';
-import { focusProject } from '../projects/focus.ts';
 import {
   listProjects,
   projectExists,
   readProject,
   writeProject,
 } from '../projects/store.ts';
-import { validatePathRef } from '../projects/scheme.ts';
 import { PROJECT_SLUG_RE, ProjectFrontmatterSchema } from '../projects/types.ts';
 import { seedBuiltinSkills } from '../skills/bootstrap.ts';
 import * as sentinelStore from '../sentinel/store.ts';
-import * as sentinelSchedule from '../sentinel/schedule.ts';
 import * as sentinelScheduler from '../sentinel/scheduler.ts';
 import { configureSentinel, startSentinel } from '../sentinel/scheduler.ts';
 import {
@@ -137,13 +71,8 @@ import {
 import { writeAttentionMirror } from '../tmux/attention.ts';
 import { cacheFileStat, negotiateFormat, synthesize } from '../tts/service.ts';
 import { installTtsCacheGc } from '../tts/cache-gc.ts';
-import { prepareForTts } from '../tts/prepare-for-tts.ts';
 import { appendEvent } from '../storage/sessions.ts';
-import {
-  markSeen,
-  subscribeActivity,
-  tapPublish,
-} from './activity-stream.ts';
+import { tapPublish } from './activity-stream.ts';
 import {
   configureDreamRunTool,
   configureExecConcurrencyCaps,
@@ -153,87 +82,45 @@ import {
   registerAllTools,
   ToolRegistry,
 } from '../tools/index.ts';
-import type { ToolContext } from '../tools/types.ts';
-import { BUILDER_TOOL_ALLOW, gatingToStore, isBuilderOnly, isImpliedRule, isToolAllowed, sessionToolDeny, unknownToolRules, withSessionDeny } from '../tools/gating.ts';
-import { toggleSkills, toggleTools } from '../tools/gating-edit.ts';
+import { isToolAllowed, sessionToolDeny, unknownToolRules, withSessionDeny } from '../tools/gating.ts';
 import { writeAgentToolGating } from '../persona/tool-gating-store.ts';
 import { writeAgentSkillGating } from '../persona/skill-gating-store.ts';
-import { isSkillAllowed } from '../skills/gating.ts';
 import { loadAvailableSkills } from '../skills/load.ts';
 import { shutdownSshPool } from '../ssh/index.ts';
-import {
-  archiveEmptyCompletedDreams,
-  consolidateStalePausedDreams,
-  listDreams,
-  recoverOrphanRunningDreams,
-} from '../dream/storage.ts';
-import { dreamArchivedAfterReset } from '../dream/rem-reset-run.ts';
+import { archiveEmptyCompletedDreams, consolidateStalePausedDreams, recoverOrphanRunningDreams } from '../dream/storage.ts';
 import { RemWorker } from '../dream/rem-worker.ts';
 import { DeepWorker } from '../dream/deep-worker.ts';
 import { LucidWorker } from '../dream/lucid-worker.ts';
-import { getLoopState, setMaxWikiCallsPerTurn } from '../dream/loop-state.ts';
+import { setMaxWikiCallsPerTurn } from '../dream/loop-state.ts';
 import { pendingLucidSummary } from '../dream/lucid-storage.ts';
 import { resolveObsidianSource } from '../memory/registry.ts';
-import type { NormalizedEvent, SseEvent } from '../types/events.ts';
-import { injectMemoryContext } from '../memory/inject.ts';
-import { configureBrowserService, getBrowserService, BrowserOpError, processIdOf } from '../browser/service.ts';
-import { ScreencastRegistry, applyViewerInput, isBrowserOpError, type ViewerSocket } from '../browser/screencast.ts';
-import { runBrowserOp, type BrowserOp } from '../tools/browser/ops.ts';
+import type { SseEvent } from '../types/events.ts';
+import { configureBrowserService } from '../browser/service.ts';
+import { ScreencastRegistry } from '../browser/screencast.ts';
 import { logger, onLog } from './logger.ts';
 import { startToolOutputSweeper } from '../tools/tool-output.ts';
 import { reconcileInterruptedTurns, restartParentWakeText, restartWakeText } from './restart-reconcile.ts';
-import { getLspManager, shutdownLsp } from '../lsp/index.ts';
+import { shutdownLsp } from '../lsp/index.ts';
 import { findBinary, LSP_SERVERS } from '../lsp/registry.ts';
-import { pushSteer, steerableTurn } from './steer-inbox.ts';
-import { configureModelAvailability, listUnavailableModels, modelUnavailable, resetModelAvailability } from '../engine/model-availability.ts';
+import { configureModelAvailability, listUnavailableModels } from '../engine/model-availability.ts';
 import { Inbox } from './inbox.ts';
 import { inboxFromLog, inboxFromState } from './inbox-sources.ts';
-import { DEFAULT_PLAN_FILE, archiveNameFor, builderSessionAllows, patchBuilderState, readBuilderState, type BuilderMode, type BuilderPhase, type TodoItem } from './builder-session.ts';
-import { workdirFromMeta } from './session-workdir.ts';
-import { claimOfSession, describeClaim, listWorkdirClaims, workdirClaimedBy } from './builder-busy.ts';
-import { answerQuestion, askQuestion, pendingQuestion } from './builder-questions.ts';
+import { builderSessionAllows, readBuilderState } from './builder-session.ts';
 import { configureStartTurn, startTurn } from './start-turn.ts';
 import type { TurnOrigin } from './turn-origin-kind.ts';
 import { VoiceCallManager } from '../voice/realtime/manager.ts';
 import type { VoiceCallSnapshot } from '../voice/realtime/call.ts';
 import type { RealtimeEvent } from '../voice/realtime/types.ts';
-import { triggerChatAbort } from './chat-aborts.ts';
-import {
-  acquireSessionLock,
-  DequeuedError,
-  listAllSessionLockStates,
-  listSessionWaiters,
-  getSessionLockStatus,
-} from './session-queue.ts';
-import { compactSessionByHand, manualCompactionText } from './session-compact.ts';
-import { findWaitCycle, registerWait } from './ask-wait-graph.ts';
-import { getTurnOrigin } from './turn-origin.ts';
+import { DequeuedError, listSessionWaiters, getSessionLockStatus } from './session-queue.ts';
 import { readPersonaFiles, writePersonaFile } from '../persona/files.ts';
 import { assembleSystemPrompt } from './prompt-assembly.ts';
 import { getResolvedTeam, loadTeamFile, teamFilePath } from '../team/store.ts';
-import { renderTeamBlock, renderTeamBlockCompact } from '../team/render.ts';
-import type { ResolvedTeam } from '../team/types.ts';
-import type { AgentKind } from '../tools/gating.ts';
-import { parseTeamFile, resolveTeam } from '../team/resolve.ts';
-import { initialTeamFile, writeTeamFile } from '../team/write.ts';
-import {
-  completeAskCall,
-  failAskCall,
-  getAskCall,
-  markAskCallPending,
-  markAskCallRunning,
-  registerAskCall,
-  waitForAskCall,
-} from './ask-calls.ts';
-import { configureWorkWake, dequeueWork, withdrawWork, listWork, markFetched, onWorkFinished, openWork, pendingWakesFor, wakeReplyTargetFor, REMOVED_BY_USER, getWork, setWaiting } from './work-ledger.ts';
+import { configureWorkWake, markFetched, onWorkFinished, openWork, getWork, setWaiting } from './work-ledger.ts';
 import { sessionSlugOf as a2aSessionSlugOf } from '../engine/a2a.ts';
 import { readLockfile } from './lockfile.ts';
 import { acquireLockfile, LockfileBusy, releaseLockfile } from './lockfile.ts';
 import { SOMORA_VERSION } from '../version.ts';
-import { cancelTaskCascade, completeTask, failTask, getTask, listTasksForAgent, markResultFetched, newTaskId, registerTask, waitForTaskCompletion } from './async-tasks.ts';
 import { reserveSpawnSlot, releaseSpawnSlot } from '../tools/agents/spawn.ts';
-import { readSessionJsonlRaw, renderSessionMarkdown } from './session-export.ts';
-import { codexReasoningEffort, resolveOpenAiReasoning } from '../engine/thinking-params.ts';
 import { registerInboxRoutes } from './routes/inbox.ts';
 import { registerHealthRoutes } from './routes/health.ts';
 import { registerFilesRoutes } from './routes/files.ts';
