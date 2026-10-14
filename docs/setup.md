@@ -762,7 +762,7 @@ in the agents guide.
 | `somora claude status` | Shows both Claude credential stores. |
 | `somora claude sync` | Reconciles the two stores now. |
 | `somora auth …` | The old name of `somora claude`. It still works and says so. |
-| `somora codex <args>` | Runs the bundled Codex: `login`, `logout`, `debug models`, `features list`, `--version`. |
+| `somora codex <args>` | Runs the bundled Codex: `login`, `logout`, `debug models`, `features list`, `--version`. Without arguments it shows where Codex and its login are and how long the login is valid. |
 | `somora grok <args>` | Runs the bundled Grok CLI: `login`, `login --device-auth`, `logout`, `models`, `--version`. Without arguments it shows where the Grok CLI and its login are and how long the login is valid. |
 | `somora skill list`, `check`, `add`, `update`, `remove` | Manages skills. Run `somora skill` for the details. |
 | `somora team init [--principal <name>]` | Writes `team.yaml` from the agents on disk. Never overwrites. |

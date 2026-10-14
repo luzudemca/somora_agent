@@ -8,7 +8,7 @@
 // from the user's home, so an existing `codex login` (or `somora codex
 // login`) keeps working and a re-login in the normal CLI propagates.
 
-import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { logger } from '../server/logger.ts';
@@ -32,6 +32,29 @@ export interface CodexAuthStatus {
 }
 
 /** Ensure the somora Codex home exists and carries the newest auth.json. */
+/** What a Codex auth.json says about the login, without any token:
+ *  a ChatGPT login with the expiry of its access token (Codex renews it),
+ *  an API key, or none. `expiresAt` is -1 when unreadable. */
+export function codexAuthState(path: string): { kind: 'chatgpt'; expiresAt: number } | { kind: 'apikey' } | { kind: 'none' } {
+  let parsed: { OPENAI_API_KEY?: unknown; tokens?: { access_token?: unknown } | null };
+  try {
+    parsed = JSON.parse(readFileSync(path, 'utf8')) as typeof parsed;
+  } catch {
+    return { kind: 'none' };
+  }
+  const access = parsed.tokens?.access_token;
+  if (typeof access === 'string' && access.split('.').length === 3) {
+    try {
+      const claims = JSON.parse(Buffer.from(access.split('.')[1]!, 'base64url').toString('utf8')) as { exp?: unknown };
+      return { kind: 'chatgpt', expiresAt: typeof claims.exp === 'number' ? claims.exp * 1000 : -1 };
+    } catch {
+      return { kind: 'chatgpt', expiresAt: -1 };
+    }
+  }
+  if (typeof parsed.OPENAI_API_KEY === 'string' && parsed.OPENAI_API_KEY) return { kind: 'apikey' };
+  return { kind: 'none' };
+}
+
 export function syncCodexAuth(): CodexAuthStatus {
   const home = somoraCodexHome();
   mkdirSync(home, { recursive: true, mode: 0o700 });
