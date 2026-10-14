@@ -548,7 +548,11 @@ function CheckSections({ trigger }: { trigger: SentinelTrigger }) {
       <Section title="Check">
         {c.description}
         <br />
-        mode: {c.mode === 'once' ? 'once (wakes on the first positive check, then done)' : 'watch (wakes on each change)'}
+        mode: {c.mode === 'once'
+          ? 'once (wakes on the first positive check, then done)'
+          : judged
+            ? 'watch (wakes when new data passes the wake rule)'
+            : 'watch (wakes each time ready turns true)'}
         <br />
         every: {c.interval}
         {view?.effectiveInterval && (
