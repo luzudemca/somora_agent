@@ -138,7 +138,7 @@ test('Art 2 watch: baseline stores the hash, same data asks nobody, new data goe
 
 test('Art 2: empty data (nothing new) never asks the decision model', () => {
   const s = { ...fresh(), baselineTaken: true, lastDataHash: dataHash([{ id: 1 }]) };
-  for (const data of [[], {}, '', null]) {
+  for (const data of [[], {}, '', null, { new_mails: [] }, { items: [], note: '' }]) {
     const r = run(watch, s, ok({ data }), t0, decision);
     assert.equal(r.needDecision, undefined, JSON.stringify(data));
     assert.equal(r.wake, undefined);

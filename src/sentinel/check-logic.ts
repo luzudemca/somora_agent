@@ -59,13 +59,14 @@ export function dataHash(data: unknown): string {
   return createHash('sha256').update(stableJson(data)).digest('hex').slice(0, 32);
 }
 
-/** Nothing to judge: no data, an empty list, object or text. A script
- *  that prints only new items prints this most of the time. */
+/** Nothing to judge: no data, an empty list, object or text — also
+ *  nested, like {"new_mails": []}. A script that prints only new items
+ *  prints this most of the time. */
 export function isEmptyData(v: unknown): boolean {
   if (v === null || v === undefined) return true;
   if (typeof v === 'string') return v.trim() === '';
-  if (Array.isArray(v)) return v.length === 0;
-  if (typeof v === 'object') return Object.keys(v as object).length === 0;
+  if (Array.isArray(v)) return v.every(isEmptyData);
+  if (typeof v === 'object') return Object.values(v as object).every(isEmptyData);
   return false;
 }
 

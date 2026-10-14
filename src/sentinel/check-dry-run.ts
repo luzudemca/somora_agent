@@ -75,11 +75,13 @@ function verdictFor(source: Pick<CheckSource, 'mode' | 'notifyOnFirst'>, art: 1 
   if (art === 1) {
     if (source.mode === 'once') {
       return answer.ready
-        ? 'ready: true — the first check would wake the agent at once and the trigger would be done. If you meant to wait for something, the condition is already met.'
+        ? 'ready: true — the first check would wake the agent at once and the trigger would be done. If the condition does not hold right now, the script reads the data wrongly: fetch the data yourself (exec curl, read the file), compare, fix and dry-run again.'
         : 'ready: false — the trigger would keep checking and wake on the first ready: true (or at the deadline).';
     }
     if (source.notifyOnFirst) return answer.ready ? 'ready: true — with notifyOnFirst the first check wakes the agent.' : 'ready: false — no wake; it wakes when ready turns true.';
-    return `ready: ${answer.ready === true} — a watch check's first run only records this as the starting state; it wakes when ready changes from false to true.`;
+    return answer.ready
+      ? 'ready: true ALREADY — a watch check only wakes when ready changes from false to true, so while this stays true it never wakes. If the condition does not hold right now, the script reads the data wrongly: fetch the data yourself (exec curl, read the file), compare field names and values, fix the script and dry-run again.'
+      : 'ready: false — a watch check\'s first run only records this as the starting state; it wakes when ready changes from false to true.';
   }
   if (isEmptyData(answer.data)) return 'data is empty — nothing to judge; the decision model is not asked for empty data.';
   if (!decision) return '';

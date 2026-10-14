@@ -285,6 +285,8 @@ function sentinelDescription(art2: boolean, limits: Config['sentinel']['checks']
     (art2 ? ' — a judged check prints {"data": …, "summary": "…"}' : '') +
     '. {"final": "failed", "summary": "…"} when it can never happen (wakes at once, ends the trigger). Exit 0 means the check ran; a non-zero exit, other output or a timeout is a check error — never a wake, three in a row pause the trigger. ' +
     '$SOMORA_SENTINEL_STATE_DIR is the script\'s own folder for remembering things between runs. ' +
+    'Look at the real data first (fetch the endpoint, list the folder) and write the script against what you saw — do not ask the user what you can look up. ' +
+    'Parse JSON and compare numbers in Python or node; jq and bc may not be installed. ' +
     (art2
       ? 'A judged script must print only items that are NEW since its last run (remember what it printed in the state folder) and nothing that changes on every run (no timestamps, counters) — otherwise old items are judged again and wake you again. '
       : '') +
@@ -652,7 +654,7 @@ export const sentinel: ToolDefinition<SentinelInputT, SentinelResult> = {
           action: 'dry_run',
           ...rest,
           next: report.ok
-            ? 'If that is what you expect, create the trigger with the same source plus name and dispatch.prompt (what to do when woken). Change the script → dry-run again.'
+            ? 'Compare the answer with the real situation (summary and data match what you see yourself?) — a wrong field name gives a plausible but wrong answer. If it is right, create the trigger with the same source plus name and dispatch.prompt (what to do when woken). Change the script → dry-run again.'
             : 'Fix the script and dry-run again (run it by hand with exec to see more).',
         };
       }

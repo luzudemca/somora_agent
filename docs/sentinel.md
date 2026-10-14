@@ -217,25 +217,27 @@ are blacked out.
 
 ### Templates
 
-A plain check in bash. It reads a status endpoint and is ready when a
-field has the wanted value. It needs `curl` and `jq`.
+A plain check in bash, for a simple test: is a service answering? It
+needs only `curl`.
 
 ```bash
 #!/bin/bash
-# Ready when the model server reports the wanted profile.
-status=$(curl -fsS --max-time 10 http://model-server.example:8080/status) || {
-  echo '{"ready": false, "summary": "status endpoint not reachable"}'; exit 0; }
-profile=$(printf '%s' "$status" | jq -r '.profile')
-if [ "$profile" = "glm" ]; then
-  echo "{\"ready\": true, \"summary\": \"profile is $profile\"}"
+# Ready when the service answers its health check.
+if curl -fsS --max-time 10 http://service.example:8080/health > /dev/null; then
+  echo '{"ready": true, "summary": "the service answers"}'
 else
-  echo "{\"ready\": false, \"summary\": \"profile is $profile\"}"
+  echo '{"ready": false, "summary": "no answer yet"}'
 fi
 ```
 
-An unreachable endpoint is answered with `ready: false` here, because
-during a switch that is expected. Exit with an error instead when an
-unreachable endpoint means the check itself is broken.
+A failed request is `ready: false` here, because waiting for the
+service is the point. For anything that reads JSON or compares numbers,
+use Python or node: `jq` and `bc` are often not installed, and a check
+that cannot compute never wakes anyone.
+
+Look at the real data before writing a check: fetch the endpoint once,
+list the folder, read one file. Then write the script against the
+field names you saw.
 
 A plain check in Python that combines two conditions and reports a
 final failure:

@@ -41,6 +41,7 @@ test('create refuses without a dry run of exactly this script; dry run then crea
   assert.deepEqual(dry.answer, { ready: false, summary: 'build running' });
   assert.match(dry.verdict, /keep checking/);
   assert.match(dry.next, /create the trigger/);
+  assert.match(dry.next, /Compare the answer with the real situation/);
   assert.equal(readdirSync(join(home, 'sentinel', 'scripts')).filter((d) => d.startsWith('dry-')).length, 0, 'the dry run left nothing behind');
 
   const made = await call({ action: 'create', name: 'build', source: src(path), dispatch: { agent: 'ada', prompt: 'report the build' } });
@@ -81,7 +82,7 @@ test('the rules apply to the dry run already: deadline, interval, refused comman
   const restart = script('restart.sh', 'somora server restart\necho \'{"ready": true}\'');
   assert.match((await call({ action: 'dry_run', source: src(restart) })).error, /refused/);
   const ready = await call({ action: 'dry_run', source: src(path) });
-  assert.match(ready.verdict, /already met/, 'a once check that is ready right away says so');
+  assert.match(ready.verdict, /reads the data wrongly/, 'a once check that is ready right away says so');
 });
 
 test('update: a new script needs its dry run, then replaces the copy and is noted in the history', async () => {
