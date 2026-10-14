@@ -1,6 +1,6 @@
 // Moved unchanged from src/server/index.ts, which calls registerProjectRoutes()
 // where these routes stood, so the registration order is the same.
-// Names index.ts shares come in through `d`.
+// Names index.ts shares come in through `routeDeps`.
 
 import type { Hono } from 'hono';
 import type * as Server from '../index.ts';
@@ -18,8 +18,8 @@ export interface ProjectRoutesDeps {
   publish: typeof Server.publish;
 }
 
-export function registerProjectRoutes(app: Hono, d: ProjectRoutesDeps): void {
-  const { publish } = d;
+export function registerProjectRoutes(app: Hono, routeDeps: ProjectRoutesDeps): void {
+  const { publish } = routeDeps;
   // ─── Projects API (Phase Projects v1) ───────────────────────────────
   // REST-symmetric to the agent-facing tool surface. Web client uses
   // these; TUI slash-commands could also call them (or use the same

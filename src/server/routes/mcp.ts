@@ -1,6 +1,6 @@
 // Moved unchanged from src/server/index.ts, which calls registerMcpRoutes()
 // where these routes stood, so the registration order is the same.
-// Names index.ts shares come in through `d`.
+// Names index.ts shares come in through `routeDeps`.
 
 import type { Hono } from 'hono';
 import type * as Server from '../index.ts';
@@ -10,8 +10,8 @@ export interface McpRoutesDeps {
   mcpHub: typeof Server.mcpHub;
 }
 
-export function registerMcpRoutes(app: Hono, d: McpRoutesDeps): void {
-  const { mcpHub } = d;
+export function registerMcpRoutes(app: Hono, routeDeps: McpRoutesDeps): void {
+  const { mcpHub } = routeDeps;
   // --- External MCP servers (hub) — design private/mcp-hub-design.md §4.5.
   // Loopback-only posture like /tools (DECISION #31): no auth header, the
   // network boundary is the trust boundary.

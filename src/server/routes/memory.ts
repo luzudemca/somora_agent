@@ -1,6 +1,6 @@
 // Moved unchanged from src/server/index.ts, which calls registerMemoryRoutes()
 // where these routes stood, so the registration order is the same.
-// Names index.ts shares come in through `d`.
+// Names index.ts shares come in through `routeDeps`.
 
 import type { Hono } from 'hono';
 import { injectMemoryContext } from '../../memory/inject.ts';

@@ -1,6 +1,6 @@
 // Moved unchanged from src/server/index.ts, which calls registerBuilderRoutes()
 // where these routes stood, so the registration order is the same.
-// Names index.ts shares come in through `d`.
+// Names index.ts shares come in through `routeDeps`.
 
 import type { Hono } from 'hono';
 import type * as Server from '../index.ts';
@@ -29,8 +29,8 @@ export interface BuilderRoutesDeps {
   publish: typeof Server.publish;
 }
 
-export function registerBuilderRoutes(app: Hono, d: BuilderRoutesDeps): void {
-  const { publish } = d;
+export function registerBuilderRoutes(app: Hono, routeDeps: BuilderRoutesDeps): void {
+  const { publish } = routeDeps;
   // GET /agents/:agent/sessions/:session/work — what this session is
   // doing, what waits behind it, what is about to arrive, and what it
   // started elsewhere (Phase 2, private/turn-dispatch-phase2-design.md

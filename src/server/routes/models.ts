@@ -1,6 +1,6 @@
 // Moved unchanged from src/server/index.ts, which calls registerModelRoutes()
 // where these routes stood, so the registration order is the same.
-// Names index.ts shares come in through `d`.
+// Names index.ts shares come in through `routeDeps`.
 
 import type { Hono } from 'hono';
 import type * as Server from '../index.ts';
@@ -13,8 +13,8 @@ export interface ModelRoutesDeps {
   tools: typeof Server.tools;
 }
 
-export function registerModelRoutes(app: Hono, d: ModelRoutesDeps): void {
-  const { tools } = d;
+export function registerModelRoutes(app: Hono, routeDeps: ModelRoutesDeps): void {
+  const { tools } = routeDeps;
   app.get('/models', (c) => {
     const list: Array<{
       provider: string;

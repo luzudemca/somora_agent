@@ -1,6 +1,6 @@
 // Moved unchanged from src/server/index.ts, which calls registerAbilitiesRoutes()
 // where these routes stood, so the registration order is the same.
-// Names index.ts shares come in through `d`.
+// Names index.ts shares come in through `routeDeps`.
 
 import type { Hono } from 'hono';
 import type * as Server from '../index.ts';
@@ -21,8 +21,8 @@ export interface AbilitiesRoutesDeps {
   tools: typeof Server.tools;
 }
 
-export function registerAbilitiesRoutes(app: Hono, d: AbilitiesRoutesDeps): void {
-  const { tools } = d;
+export function registerAbilitiesRoutes(app: Hono, routeDeps: AbilitiesRoutesDeps): void {
+  const { tools } = routeDeps;
   // --- Per-agent tool visibility (web UI Agents×Tools matrix — design
   // §4.6). GET reads registry + persona gating; PUT splices the tools:
   // block into agent.yaml server-side (thin-client rule: the UI never

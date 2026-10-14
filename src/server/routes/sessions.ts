@@ -1,6 +1,6 @@
 // Moved unchanged from src/server/index.ts, which calls registerSessionRoutes()
 // where these routes stood, so the registration order is the same.
-// Names index.ts shares come in through `d`.
+// Names index.ts shares come in through `routeDeps`.
 
 import type { Hono } from 'hono';
 import type * as Server from '../index.ts';
@@ -28,8 +28,8 @@ export interface SessionRoutesDeps {
   streams: typeof Server.streams;
 }
 
-export function registerSessionRoutes(app: Hono, d: SessionRoutesDeps): void {
-  const { nextTurnPrompt, publish, resolveEffectiveModel, streamKey, streams } = d;
+export function registerSessionRoutes(app: Hono, routeDeps: SessionRoutesDeps): void {
+  const { nextTurnPrompt, publish, resolveEffectiveModel, streamKey, streams } = routeDeps;
   app.get('/agents/:agent/sessions', async (c) => {
     const agent = c.req.param('agent');
     if (!(await loadPersona(agent))) {

@@ -1,6 +1,6 @@
 // Moved unchanged from src/server/index.ts, which calls registerServerRoutes()
 // where these routes stood, so the registration order is the same.
-// Names index.ts shares come in through `d`.
+// Names index.ts shares come in through `routeDeps`.
 
 import type { Hono } from 'hono';
 import type * as Server from '../index.ts';
@@ -28,8 +28,8 @@ export interface ServerRoutesDeps {
   updateChecker: typeof Server.updateChecker;
 }
 
-export function registerServerRoutes(app: Hono, d: ServerRoutesDeps): void {
-  const { configFileMtime, refreshSubagentDenyCheck, updateChecker } = d;
+export function registerServerRoutes(app: Hono, routeDeps: ServerRoutesDeps): void {
+  const { configFileMtime, refreshSubagentDenyCheck, updateChecker } = routeDeps;
   /** Version plus, when known, what somora.ai says is current. */
   app.get('/version', (c) => {
     const u = updateChecker.status();

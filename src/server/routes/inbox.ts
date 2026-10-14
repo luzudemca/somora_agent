@@ -1,6 +1,6 @@
 // Moved unchanged from src/server/index.ts, which calls registerInboxRoutes()
 // where these routes stood, so the registration order is the same.
-// Names index.ts shares come in through `d`.
+// Names index.ts shares come in through `routeDeps`.
 
 import type { Hono } from 'hono';
 import type * as Server from '../index.ts';
@@ -12,8 +12,8 @@ export interface InboxRoutesDeps {
   refreshSubagentDenyCheck: typeof Server.refreshSubagentDenyCheck;
 }
 
-export function registerInboxRoutes(app: Hono, d: InboxRoutesDeps): void {
-  const { checkInboxState, inbox, refreshSubagentDenyCheck } = d;
+export function registerInboxRoutes(app: Hono, routeDeps: InboxRoutesDeps): void {
+  const { checkInboxState, inbox, refreshSubagentDenyCheck } = routeDeps;
   // GET /inbox — what the inbox shows, and how much is unread.
   app.get('/inbox', async (c) => {
     // A config.yaml broken a moment ago shows up here, not 5 minutes later.

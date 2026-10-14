@@ -1,6 +1,6 @@
 // Moved unchanged from src/server/index.ts, which calls registerAgentRoutes()
 // where these routes stood, so the registration order is the same.
-// Names index.ts shares come in through `d`; nextTurnPrompt are read from it
+// Names index.ts shares come in through `routeDeps`; nextTurnPrompt are read from it
 // per request (index.ts sets them up later or changes them).
 
 import type { Hono } from 'hono';
@@ -15,7 +15,7 @@ export interface AgentRoutesDeps {
   readonly nextTurnPrompt: typeof Server.nextTurnPrompt;
 }
 
-export function registerAgentRoutes(app: Hono, d: AgentRoutesDeps): void {
+export function registerAgentRoutes(app: Hono, routeDeps: AgentRoutesDeps): void {
   // Verbose-mode helper: returns the persona's compiled system prompt.
   // Used by /verbose system in the TUI to surface what the model is
   // actually seeing as instructions. Static per agent (does not change
@@ -83,7 +83,7 @@ export function registerAgentRoutes(app: Hono, d: AgentRoutesDeps): void {
     const session = await resolveSessionId(agent, sessionRef);
     if (!session) return c.json({ error: `session '${sessionRef}' not found` }, 404);
     const sessionMeta = await sessionMetaStore.get(agent, session);
-    const { assembled, available } = await d.nextTurnPrompt(agent, session, persona, sessionMeta);
+    const { assembled, available } = await routeDeps.nextTurnPrompt(agent, session, persona, sessionMeta);
     const toolSchemaChars = available.reduce(
       (n, t) => n + JSON.stringify({ name: t.name, description: t.description, parameters: t.jsonSchema }).length,
       0,

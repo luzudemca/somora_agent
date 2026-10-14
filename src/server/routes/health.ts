@@ -1,6 +1,6 @@
 // Moved unchanged from src/server/index.ts, which calls registerHealthRoutes()
 // where these routes stood, so the registration order is the same.
-// Names index.ts shares come in through `d`.
+// Names index.ts shares come in through `routeDeps`.
 
 import type { Hono } from 'hono';
 import type * as Server from '../index.ts';
@@ -18,8 +18,8 @@ export interface HealthRoutesDeps {
   streams: typeof Server.streams;
 }
 
-export function registerHealthRoutes(app: Hono, d: HealthRoutesDeps): void {
-  const { lastEngineEventAt, lastPublishOkAt, streamKey, streams } = d;
+export function registerHealthRoutes(app: Hono, routeDeps: HealthRoutesDeps): void {
+  const { lastEngineEventAt, lastPublishOkAt, streamKey, streams } = routeDeps;
   app.get('/healthz', (c) => c.text('ok'));
 
   // Server startup wall-clock — used by /health to compute uptime.

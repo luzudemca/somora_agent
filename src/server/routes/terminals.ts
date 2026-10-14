@@ -1,6 +1,6 @@
 // Moved unchanged from src/server/index.ts, which calls registerTerminalRoutes()
 // where these routes stood, so the registration order is the same.
-// Names index.ts shares come in through `d`; TERMINAL_WS_DEAD_MS, TERMINAL_WS_PING_MS are read from it
+// Names index.ts shares come in through `routeDeps`; TERMINAL_WS_DEAD_MS, TERMINAL_WS_PING_MS are read from it
 // per request (index.ts sets them up later or changes them).
 
 import type { Hono } from 'hono';
@@ -17,7 +17,7 @@ export interface TerminalRoutesDeps {
   readonly TERMINAL_WS_PING_MS: typeof Server.TERMINAL_WS_PING_MS;
 }
 
-export function registerTerminalRoutes(app: Hono, d: TerminalRoutesDeps): void {
+export function registerTerminalRoutes(app: Hono, routeDeps: TerminalRoutesDeps): void {
   // Tmux session listing for the web tmux-app. Joins live `tmux ls`
   // output with somora's origin store. Empty list when no tmux server
   // is running — that's a normal state, not an error.
@@ -40,7 +40,7 @@ export function registerTerminalRoutes(app: Hono, d: TerminalRoutesDeps): void {
     bag.__lastSeenAt = Date.now();
     bag.__hbTimer = setInterval(() => {
       const idle = Date.now() - (bag.__lastSeenAt ?? 0);
-      if (idle > d.TERMINAL_WS_DEAD_MS) {
+      if (idle > routeDeps.TERMINAL_WS_DEAD_MS) {
         logger.info({ msg: `${label}.heartbeat_timeout`, idleMs: idle });
         try {
           ws.close(4000, 'heartbeat timeout');
@@ -62,7 +62,7 @@ export function registerTerminalRoutes(app: Hono, d: TerminalRoutesDeps): void {
       } catch {
         /* socket closed */
       }
-    }, d.TERMINAL_WS_PING_MS);
+    }, routeDeps.TERMINAL_WS_PING_MS);
   }
 
   // Plain shell terminal: WebSocket bridge to a fresh `$SHELL` PTY
