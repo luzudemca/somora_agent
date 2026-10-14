@@ -7,36 +7,14 @@ import { z } from 'zod';
 import { readFile } from 'node:fs/promises';
 import { activeDecisionModel, type DecisionModel } from '../../config/types.ts';
 import { cachedServerInputLimit, effectiveInputLimit, evaluateDecision, GUIDANCE, type DecisionOutcome, type DecisionRequest } from '../../decisions/client.ts';
-import { detectMimeFromBuffer } from '../../multimodal/mime.ts';
-import { readDimensions } from '../../multimodal/dimensions.ts';
-import { fitImageForModel } from '../../multimodal/model-image.ts';
+import { DecisionEntry, DecisionQuestionsSchema, MAX_IMAGES, prepareDecisionImages } from '../../decisions/input.ts';
 import { checkReadAllowed, realpathSafeAncestor, resolveLocalPath } from '../file/policy.ts';
 import type { ToolContext, ToolDefinition } from '../types.ts';
 
-const MAX_IMAGES = 4;
-/** Clef's published limits for embedded images (Workers AI model page). */
-const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
-const MAX_IMAGES_BYTES = 8 * 1024 * 1024;
-const MAX_IMAGE_PIXELS = 16_000_000;
-const IMAGE_MIMES = new Set(['image/png', 'image/jpeg', 'image/webp']);
-
-const entry = z.union([z.string(), z.record(z.string(), z.unknown()), z.array(z.unknown()), z.null()]);
-
-const Question = z.discriminatedUnion('type', [
-  z
-    .object({ type: z.literal('boolean'), instructions: entry.optional(), criteria: z.object({ true: entry.optional(), false: entry.optional() }).strict().nullable().optional() })
-    .strict()
-    // The question id is not read by the model: without instructions or
-    // true/false criteria it would answer a question that has no text.
-    .refine((q) => (q.instructions !== undefined && q.instructions !== null && q.instructions !== '') || (q.criteria != null && (q.criteria.true != null || q.criteria.false != null)), 'a boolean question needs instructions or criteria.true/false — the question id is not read'),
-  z.object({ type: z.literal('choice'), instructions: entry.optional(), criteria: z.record(z.string(), entry).refine((c) => Object.keys(c).length >= 2 && Object.keys(c).length <= 255, 'choice needs 2–255 alternatives') }).strict(),
-  z.object({ type: z.literal('score'), instructions: entry.optional(), criteria: z.array(entry).min(2).max(10) }).strict(),
-]);
-
 const EvaluateInput = z
   .object({
-    state: entry,
-    questions: z.record(z.string(), Question).refine((q) => Object.keys(q).length >= 1 && Object.keys(q).length <= 256, '1–256 questions'),
+    state: DecisionEntry,
+    questions: DecisionQuestionsSchema,
     images: z.array(z.string().min(1)).min(1).max(MAX_IMAGES).optional(),
   })
   .strict();
@@ -132,35 +110,23 @@ function description(model: DecisionModel | null): string {
   );
 }
 
-/** Read, check and scale the named images the way a chat attachment is
- *  scaled for a model (attachments.maxImageEdge). */
+/** Read the named images (the agent's file access rules apply), then
+ *  check and scale them like every decision image (src/decisions/input.ts). */
 async function loadImages(paths: string[], ctx: ToolContext): Promise<NonNullable<DecisionRequest['images']> | string> {
-  const out: NonNullable<DecisionRequest['images']> = [];
-  let total = 0;
+  const items: Array<{ label: string; bytes: Buffer }> = [];
   for (const p of paths) {
     const { absolute } = await resolveLocalPath(p, ctx.agent, ctx.config, ctx.session);
     for (const candidate of [absolute, await realpathSafeAncestor(absolute)]) {
       const verdict = checkReadAllowed(candidate);
       if (!verdict.ok) return `images: ${p}: ${verdict.reason}`;
     }
-    let bytes: Buffer;
     try {
-      bytes = await readFile(absolute);
+      items.push({ label: p, bytes: await readFile(absolute) });
     } catch (err) {
       return `images: could not read ${p}: ${(err as Error).message}`;
     }
-    const mime = detectMimeFromBuffer(bytes).mimeType;
-    if (!IMAGE_MIMES.has(mime)) return `images: ${p} is ${mime || 'not an image'} — PNG, JPEG or WebP only`;
-    const fitted = await fitImageForModel(bytes, mime, ctx.config.attachments?.maxImageEdge ?? 2048);
-    const dims = readDimensions(fitted.bytes);
-    if (!dims) return `images: could not read the size of ${p}`;
-    if (dims.width * dims.height > MAX_IMAGE_PIXELS) return `images: ${p} has ${dims.width}×${dims.height} pixels, more than 16 megapixels`;
-    if (fitted.bytes.length > MAX_IMAGE_BYTES) return `images: ${p} is ${Math.round(fitted.bytes.length / 1024)} KB after scaling, more than 4 MB`;
-    total += fitted.bytes.length;
-    if (total > MAX_IMAGES_BYTES) return 'images: together more than 8 MB after scaling — send fewer';
-    out.push({ base64: fitted.bytes.toString('base64'), width: dims.width, height: dims.height });
   }
-  return out;
+  return prepareDecisionImages(items, ctx.config.attachments?.maxImageEdge ?? 2048);
 }
 
 /** `images`/`image` inside an object state holding path-like strings. */

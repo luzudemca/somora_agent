@@ -177,6 +177,14 @@ A result is either `ok` or `unavailable`. An unavailable result names a
 There is no automatic fallback to another model. The agent carries on
 without the answer or tries again later.
 
+## From scripts and skills
+
+A script or skill asks the same model with `POST /decisions/evaluate`:
+the tool's input as JSON, images as base64, the login key in the
+`Authorization` header (`$(somora key)` on the server). The answer is
+the result above, with an HTTP status that follows the reason. The API
+reference lists the details.
+
 ## Settings
 
 ```yaml
@@ -204,5 +212,6 @@ and the questions are not logged.
 
 - [Image handling](image-handling.md): which image file an agent is shown and which it hands on
 - [Models](models.md): the models somora was run with, decision models included
+- [API](api.md): `POST /decisions/evaluate`
 - [Tools](tools.md): every tool, and how to switch tools off per agent
 - [Agents](agents.md): the Abilities window and per-agent settings

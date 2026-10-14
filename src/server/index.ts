@@ -133,6 +133,7 @@ import { registerServerRoutes } from './routes/server.ts';
 import { registerSessionRoutes } from './routes/sessions.ts';
 import { registerMemoryRoutes } from './routes/memory.ts';
 import { registerModelRoutes } from './routes/models.ts';
+import { registerDecisionRoutes } from './routes/decisions.ts';
 import { registerTeamRoutes } from './routes/team.ts';
 import { registerAgentRoutes } from './routes/agents.ts';
 import { registerBuilderRoutes } from './routes/builder.ts';
@@ -758,6 +759,8 @@ export async function nextTurnPrompt(
 registerTeamRoutes(app);
 
 registerModelRoutes(app, { tools });
+
+registerDecisionRoutes(app);
 
 registerMemoryRoutes(app);
 

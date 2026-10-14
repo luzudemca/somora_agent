@@ -1208,6 +1208,40 @@ Every model in `config.yaml`.
 Forgets every "unavailable" mark, so the first-choice models are tried
 again. Returns `{ok: true, cleared, retryUnavailableMinutes}`.
 
+### `POST /decisions/evaluate`
+
+Asks the configured decision model, the same one the `decision_evaluate`
+tool uses, for scripts, skills and other programs. It needs the login
+key like every route. The body is the tool's input, with images as
+base64 instead of file paths.
+
+| Body field | Required | Meaning |
+|---|---|---|
+| `state` | yes | What the questions are about: text, a JSON object or array. Only this is evaluated. |
+| `questions` | yes | Question id → `{type: "boolean"\|"choice"\|"score", instructions?, criteria?}`, 1 to 256. Same rules as the tool. |
+| `images` | no | Up to 4 images as base64, with or without a `data:image/…;base64,` prefix. Only for a model with the `image` capability. |
+
+```bash
+curl -H "Authorization: Bearer $(somora key)" -X POST $BASE/decisions/evaluate \
+     -H 'Content-Type: application/json' \
+     -d '{"state":["Invoice overdue, pay by tonight","Newsletter"],
+          "questions":{"urgent":{"type":"boolean","instructions":"Does any of these need an answer today?"}}}'
+```
+
+A success is a `200` with the result the decision models page
+describes (`status: "ok"`, `answers`, `usage`). A failure keeps the
+tool's `reason` and `guidance` and adds `error`; the status code
+follows the reason:
+
+| Status | Reasons |
+|---|---|
+| `400` | A body that does not validate, an image that cannot be used, `images-unsupported`, `unsupported-input`. |
+| `413` | `too-long`, `truncated`, or a body over 24 MB. |
+| `429` | `rate-limited`. |
+| `502` | `authentication`, `not-ready`, `transport`, `invalid-response`. |
+| `503` | `not-configured`. |
+| `504` | `deadline`. |
+
 ### `GET /agents/:agent/sessions/:session/model`
 
 The model the session's next turn will use.
