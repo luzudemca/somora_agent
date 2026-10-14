@@ -210,6 +210,10 @@ environment and the skill secrets its commands may use:
 | `SOMORA_SENTINEL_LAST_FIRED` | When the trigger last woke the agent, empty if never. |
 | `SOMORA_AGENT` | The agent the trigger wakes. |
 
+A skill's secrets reach the script when the script names one of the
+skill's programs anywhere, also as a string in Python or JavaScript:
+`subprocess.run(["gog", "gmail", …])` gets the gog variables.
+
 The script runs in the agent's workspace, with the same blocked
 commands as the agent's shell. The login key is not passed on. Before
 anyone reads the output, provider keys and other known secrets in it

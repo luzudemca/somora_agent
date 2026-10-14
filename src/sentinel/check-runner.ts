@@ -20,7 +20,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import type { Config } from '../config/types.ts';
 import { loadPersona } from '../persona/loader.ts';
 import { effectiveWorkspace } from '../server/workspace.ts';
-import { skillEnvScopeForCommand } from '../skills/env-scope.ts';
+import { scriptScanText, skillEnvScopeForCommand } from '../skills/env-scope.ts';
 import { buildSpawnEnv } from '../tools/exec/local.ts';
 import { checkStateDir, readCheckScript } from './check-store.ts';
 import { redactSecrets, secretValues } from './redact.ts';
@@ -199,7 +199,9 @@ export async function runCheck(input: CheckRunInput): Promise<CheckRunOutcome> {
   const persona = await loadPersona(input.agent);
   if (!persona) return fail(`agent '${input.agent}' not found`, 'permanent');
   const cwd = effectiveWorkspace(persona, input.config);
-  const scope = await skillEnvScopeForCommand(script.text, input.config);
+  // The whole script decides which skill secrets it gets, string
+  // literals included: Python calling gog through subprocess gets GOG_*.
+  const scope = await skillEnvScopeForCommand(scriptScanText(script.text), input.config);
   const env = buildSpawnEnv(
     {
       SOMORA_AGENT: input.agent,

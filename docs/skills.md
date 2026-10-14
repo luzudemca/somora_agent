@@ -388,7 +388,7 @@ The limits:
 
 | Case | What to do |
 |---|---|
-| A script calls the program only indirectly | Name the program in the command, or pass the variable with the `env` parameter of `exec`. |
+| A script calls the program only indirectly | Name the program in the command, or pass the variable with the `env` parameter of `exec`. A Sentinel check script is read as a whole, so naming the program inside it is enough ([Sentinel](sentinel.md#check-triggers)). |
 | The skill declares `env_vars` but no `bins` | Nothing can match, so the variables stay removed. Declare the bins. |
 | tmux panes and commands on remote hosts | Not covered. A remote host uses its own environment. |
 

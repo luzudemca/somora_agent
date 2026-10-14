@@ -103,6 +103,15 @@ export function extractCommandBins(command: string): Set<string> {
   return out;
 }
 
+/** A whole script file (a Sentinel check) names its programs as string
+ *  literals too — `subprocess.run(["gog", "gmail", …])`, `spawn('gog')`.
+ *  Quotes, brackets, braces, commas and `=` become spaces so those
+ *  literals count as words like in a shell command. Over-matching (a
+ *  comment that names the program) is accepted, as for commands. */
+export function scriptScanText(script: string): string {
+  return script.replace(/["'`\[\]{},=]/g, ' ');
+}
+
 /** Compute the scope for one command against a skill set. Pure —
  *  exported for tests; values come from the passed env, not process.env. */
 export function computeSkillEnvScope(

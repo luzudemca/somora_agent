@@ -10,7 +10,7 @@
 
 import assert from 'node:assert/strict';
 
-import { computeSkillEnvScope, extractCommandBins } from './env-scope.ts';
+import { computeSkillEnvScope, extractCommandBins, scriptScanText } from './env-scope.ts';
 
 let pass = 0;
 let fail = 0;
@@ -127,6 +127,17 @@ const ENV = {
   const matched = computeSkillEnvScope('gog gmail send', SKILLS, ENV);
   check('hint: absent when the var WAS injected', skillEnvStripHint(matched, 1, 'set GOG_KEYRING_PASSWORD') === undefined);
   check('hint: absent without scoping', skillEnvStripHint(undefined, 1, 'set GOG_KEYRING_PASSWORD') === undefined);
+}
+
+{
+  // Sentinel check scripts: the program as a string literal counts.
+  const py = 'import subprocess\nout = subprocess.run(["gog", "gmail", "search", "is:unread"], capture_output=True)\n';
+  check('script: python list literal matches', computeSkillEnvScope(scriptScanText(py), SKILLS, ENV).matchedSkills.includes('gog'));
+  check('script: without the scan it does not', !computeSkillEnvScope(py, SKILLS, ENV).matchedSkills.includes('gog'));
+  const js = "import { execFileSync } from 'node:child_process';\nexecFileSync('gog', ['gmail','search']);\n";
+  check('script: node call matches', computeSkillEnvScope(scriptScanText(js), SKILLS, ENV).matchedSkills.includes('gog'));
+  const other = 'print({"gogs": 1, "catalog": "x"})';
+  check('script: a longer word is not the program', computeSkillEnvScope(scriptScanText(other), SKILLS, ENV).matchedSkills.length === 0);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
