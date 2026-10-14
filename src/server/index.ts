@@ -247,6 +247,7 @@ import { registerSessionRoutes } from './routes/sessions.ts';
 import { registerMemoryRoutes } from './routes/memory.ts';
 import { registerModelRoutes } from './routes/models.ts';
 import { registerTeamRoutes } from './routes/team.ts';
+import { registerAgentRoutes } from './routes/agents.ts';
 
 type Subscriber = (e: SseEvent) => Promise<void>;
 interface StreamSub {
@@ -895,60 +896,7 @@ registerInboxRoutes(app, { checkInboxState, inbox, refreshSubagentDenyCheck });
 
 registerServerRoutes(app, { configFileMtime, refreshSubagentDenyCheck, updateChecker });
 
-// Verbose-mode helper: returns the persona's compiled system prompt.
-// Used by /verbose system in the TUI to surface what the model is
-// actually seeing as instructions. Static per agent (does not change
-// per turn — ephemeralContext is per-turn and rides on the memory SSE).
-app.get('/agents/:agent/system-prompt', async (c) => {
-  const agent = c.req.param('agent');
-  const persona = await loadPersona(agent);
-  if (!persona) return c.json({ error: `agent '${agent}' not found` }, 404);
-  return c.json({ agent, systemPrompt: persona.systemPrompt });
-});
-
-app.get('/agents', async (c) => c.json(await listAgents()));
-
-// ── Persona files + prompt preview (web Agent window) ───────────────
-// Read the three persona files (+ agent.yaml read-only) with hashes and
-// sizes against config.promptBudgets; write one under an optimistic
-// lock (baseHash) because the agents self-edit these files.
-app.get('/agents/:agent/persona', async (c) => {
-  const agent = c.req.param('agent');
-  if (!(await loadPersona(agent))) return c.json({ error: `agent '${agent}' not found` }, 404);
-  const files = await readPersonaFiles(agent);
-  const personaChars = files.filter((f) => !f.readOnly).reduce((n, f) => n + f.chars, 0);
-  const kind = (await loadPersona(agent))?.kind ?? 'chat';
-  return c.json({
-    agent,
-    kind,
-    files,
-    budgets: config.promptBudgets,
-    totals: { personaChars },
-  });
-});
-
-app.put('/agents/:agent/persona/:file', async (c) => {
-  const agent = c.req.param('agent');
-  const file = c.req.param('file');
-  const body = (await c.req.json().catch(() => null)) as { content?: unknown; baseHash?: unknown } | null;
-  if (!body || typeof body.content !== 'string' || typeof body.baseHash !== 'string') {
-    return c.json({ error: 'body {content: string, baseHash: string} required' }, 400);
-  }
-  let r;
-  try {
-    r = await writePersonaFile(agent, file, body.content, body.baseHash);
-  } catch (err) {
-    return c.json({ error: (err as Error).message }, 400);
-  }
-  if (!r.ok) {
-    return c.json(
-      { error: r.error, ...(r.currentHash ? { currentHash: r.currentHash, currentContent: r.currentContent } : {}) },
-      r.status,
-    );
-  }
-  logger.info({ msg: 'persona.saved', agent, file, chars: body.content.length, backup: r.backup });
-  return c.json({ ok: true, hash: r.hash, backup: r.backup, chars: body.content.length });
-});
+registerAgentRoutes(app, { get nextTurnPrompt() { return nextTurnPrompt as typeof nextTurnPrompt; } });
 
 // The system prompt and tool list the NEXT turn of a session would send.
 // Read-only: the wiki snapshot is not persisted. Shared by the prompt
@@ -994,40 +942,6 @@ export async function nextTurnPrompt(
   });
   return { assembled, available };
 }
-
-// The system prompt exactly as the next turn on `session` would send it,
-// split into its parts, plus the tool schemas the agent can see (they
-// travel on the API tool channel, not in this text — but they cost
-// context all the same). Read-only: the wiki snapshot is not persisted.
-app.get('/agents/:agent/prompt-preview', async (c) => {
-  const agent = c.req.param('agent');
-  const persona = await loadPersona(agent);
-  if (!persona) return c.json({ error: `agent '${agent}' not found` }, 404);
-  const sessionRef = c.req.query('session') || 'main';
-  const session = await resolveSessionId(agent, sessionRef);
-  if (!session) return c.json({ error: `session '${sessionRef}' not found` }, 404);
-  const sessionMeta = await sessionMetaStore.get(agent, session);
-  const { assembled, available } = await nextTurnPrompt(agent, session, persona, sessionMeta);
-  const toolSchemaChars = available.reduce(
-    (n, t) => n + JSON.stringify({ name: t.name, description: t.description, parameters: t.jsonSchema }).length,
-    0,
-  );
-  return c.json({
-    agent,
-    session,
-    text: assembled.text,
-    chars: assembled.text.length,
-    parts: assembled.parts.map((p) => ({ key: p.key, label: p.label, chars: p.text.length })),
-    tools: { count: available.length, schemaChars: toolSchemaChars, names: available.map((t) => t.name) },
-    budgets: config.promptBudgets,
-    notIncluded: [
-      'tool schemas (sent on the API tool channel; counted above, engines load them direct or deferred)',
-      'memory recall injected per turn',
-      'the conversation history',
-      "the engine's own built-in instructions (Claude Code, Codex)",
-    ],
-  });
-});
 
 registerTeamRoutes(app);
 
