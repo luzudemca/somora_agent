@@ -5,6 +5,7 @@ import { serve, upgradeWebSocket } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono, type Context } from 'hono';
 import { checkBrowserRequest, isThisMachine } from './browser-guard.ts';
+import { config, configLoadedAt, configLoadedMtimeMs, setConfig, setConfigLoadedAt, setConfigMtime } from './server-state.ts';
 import { COOKIE_NAME, KeyStore, MissCounter, presentedKey } from './auth-key.ts';
 import { serializeSessionEvent } from './sse-serializer.ts';
 import { streamSSEH2Safe } from './sse-h2-safe.ts';
@@ -472,10 +473,6 @@ if (envFileResult.exists) {
 // before those imports trigger.
 setupClaudeConfigDir();
 
-let config: Config;
-// Reload bookkeeping for GET /config/status + POST /config/reload.
-let configLoadedAt = new Date().toISOString();
-let configLoadedMtimeMs = 0;
 async function configFileMtime(): Promise<number> {
   try {
     return (await statFile(configPath())).mtimeMs;
@@ -484,8 +481,8 @@ async function configFileMtime(): Promise<number> {
   }
 }
 try {
-  config = await loadConfig();
-  configLoadedMtimeMs = await configFileMtime();
+  setConfig(await loadConfig());
+  setConfigMtime(await configFileMtime());
   // The boot config is the first "last valid" one: a broken edit later
   // falls back to it instead of failing every turn.
   primeFreshConfig(config, configLoadedMtimeMs);
@@ -1984,9 +1981,9 @@ app.post('/config/reload', async (c) => {
   }
   const changed = diffConfigSections(config, next);
   const restartRequired = restartRequiredFor(changed);
-  config = next;
-  configLoadedAt = new Date().toISOString();
-  configLoadedMtimeMs = await configFileMtime();
+  setConfig(next);
+  setConfigLoadedAt(new Date().toISOString());
+  setConfigMtime(await configFileMtime());
   primeFreshConfig(next, configLoadedMtimeMs);
   // A reload is also the operator's "try the models again": every
   // unavailable mark is dropped and the TTL re-read.
