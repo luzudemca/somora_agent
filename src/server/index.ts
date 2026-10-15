@@ -149,6 +149,7 @@ import { registerVoiceRoutes } from './routes/voice.ts';
 import { registerBrowserRoutes } from './routes/browser.ts';
 import { registerVideoRoutes } from './routes/video.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
+import { registerThemeRoutes } from './routes/themes.ts';
 
 type Subscriber = (e: SseEvent) => Promise<void>;
 interface StreamSub {
@@ -706,6 +707,8 @@ setTimeout(checkInboxState, 30_000).unref();
 setInterval(checkInboxState, 5 * 60_000).unref();
 
 registerInboxRoutes(app, { checkInboxState, inbox, refreshSubagentDenyCheck });
+
+registerThemeRoutes(app);
 
 registerServerRoutes(app, { configFileMtime, refreshSubagentDenyCheck, updateChecker });
 
